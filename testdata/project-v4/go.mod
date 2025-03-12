@@ -8,8 +8,8 @@ require (
 	github.com/cert-manager/cert-manager v1.17.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
-	k8s.io/api v0.32.1
-	k8s.io/apimachinery v0.32.1
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.1
 	sigs.k8s.io/controller-runtime v0.20.3
 )
