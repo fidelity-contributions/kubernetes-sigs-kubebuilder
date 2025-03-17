@@ -2,6 +2,8 @@ module sigs.k8s.io/kubebuilder/v4
 
 go 1.23.0
 
+toolchain go1.24.1
+
 godebug default=go1.23
 
 require (
@@ -9,7 +11,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.0
 	github.com/onsi/gomega v1.36.2
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/afero v1.12.0
+	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/text v0.23.0
