@@ -227,7 +227,7 @@ func templateEnvironmentVariables(yamlContent string) string {
 		block := make([]string, 0, 22)
 		block = append(block,
 			indentStr+"env:",
-			hasEnv,
+			indentStr+hasEnv,
 			childIndent+`{{- if .Values.manager.env }}`,
 			childIndent+"{{- toYaml .Values.manager.env | nindent "+childIndentWidth+" }}",
 			childIndent+`{{- end }}`,
