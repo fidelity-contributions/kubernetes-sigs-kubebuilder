@@ -72,6 +72,9 @@ Kubebuilder runs make generate unless --make=false is set.
   # Create a cluster-scoped API resource without a controller
   %[1]s create api --group crew --version v1 --kind Admiral --namespaced=false --controller=false
 
+  # Create an API resource scaffolded with Server-Side Apply support (alpha)
+  %[1]s create api --group crew --version v1 --kind Captain --ssa
+
   # Create a controller for an external API type
   %[1]s create api --group cert-manager --version v1 --kind Certificate \
     --resource=false --controller=true \
