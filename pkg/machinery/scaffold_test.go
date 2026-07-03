@@ -128,6 +128,16 @@ var _ = Describe("Scaffold", func() {
 				To(Equal("Copyright 2024 The Authors."))
 		})
 
+		It("should return an empty string unchanged", func() {
+			Expect(SubstituteYear("")).To(Equal(""))
+		})
+
+		It("should substitute YEAR when boilerplate is provided via WithBoilerplate", func() {
+			s := NewScaffold(Filesystem{FS: afero.NewMemMapFs()},
+				WithBoilerplate("Copyright YEAR The Authors."))
+			Expect(s.injector.boilerplate).To(Equal("Copyright 2025 The Authors."))
+		})
+
 		DescribeTable("should replace only standalone YEAR placeholders",
 			func(input, expected string) {
 				Expect(SubstituteYear(input)).To(Equal(expected))
