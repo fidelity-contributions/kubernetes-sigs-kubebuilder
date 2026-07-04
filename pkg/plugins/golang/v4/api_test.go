@@ -95,6 +95,27 @@ var _ = Describe("createAPISubcommand", func() {
 		Expect(err.Error()).To(ContainSubstring("cannot use '--external-api-path'"))
 	})
 
+	It("should reject --ssa when not creating an API resource (--resource=false)", func() {
+		subCmd.options.SSA = true
+		subCmd.options.DoAPI = false
+		subCmd.options.DoController = true
+
+		err := subCmd.InjectResource(res)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(
+			"'--ssa' can only be used when creating an API resource ('--resource=true')"))
+	})
+
+	It("should allow --ssa when creating an API resource (--resource=true)", func() {
+		subCmd.options.SSA = true
+		subCmd.options.DoAPI = true
+		subCmd.options.DoController = true
+
+		Expect(subCmd.InjectResource(res)).To(Succeed())
+		Expect(res.API.SSA).To(BeTrue())
+	})
+
 	It("should require external-api-path when using external-api-module", func() {
 		subCmd.options.DoAPI = false
 		subCmd.options.ExternalAPIModule = externalAPIModuleWithVersion
