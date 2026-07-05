@@ -247,7 +247,42 @@ Add custom labels and annotations using `manager.labels`, `manager.annotations`,
 
 ### ServiceAccount configuration
 
-Set `serviceAccount.enabled: true` (default) to create a ServiceAccount. Set `serviceAccount.enabled: false` to use an existing one.
+Set `serviceAccount.enabled: true` (default) to create a ServiceAccount. Set `serviceAccount.enabled: false` to use an existing one:
+
+```yaml
+serviceAccount:
+  enabled: false
+  name: my-existing-sa
+```
+
+The chart ships with the toggle enabled:
+
+```yaml
+serviceAccount:
+  enabled: true
+```
+
+Helm merges this default into any values file that omits the section, so omitting it keeps creating the account.
+
+When `serviceAccount.enabled: false`, `serviceAccount.name` is required and the chart fails to render without it. Set `name: default` explicitly to use the namespace default ServiceAccount.
+
+The resolved name is used consistently in the Deployment and in all RBAC bindings, for both cluster-scoped and namespaced RBAC modes:
+
+| `serviceAccount.enabled` | `serviceAccount.name` | ServiceAccount created | Name used (Deployment + RBAC bindings) |
+|--------------------------|-----------------------|------------------------|----------------------------------------|
+| `true` (default) | any | Yes | Generated (`<fullname>-controller-manager`, name is ignored) |
+| `false` | set | No | The provided name |
+| `false` | `default` | No | Namespace default ServiceAccount |
+| `false` | unset | No | Render fails with a clear error |
+
+The generated name is built from the chart fullname, typically `<release>-<chart>`, plus the `-controller-manager` suffix, truncated to the 63-character Kubernetes limit. It respects `nameOverride` and `fullnameOverride`.
+
+<aside class="note warning" role="note">
+<p class="note-title">Why an explicit name is required</p>
+
+Falling back to the namespace default ServiceAccount silently would bind the operator RBAC permissions to a shared identity. Requiring `serviceAccount.name` makes that choice explicit and catches misconfiguration at render time.
+
+</aside>
 
 Add annotations for cloud provider integrations:
 
