@@ -150,6 +150,9 @@ func (opts *Update) Update() error {
 	// 3. Installs old release
 	// 4. Runs alpha generate with old release binary
 	// 5. Commits the result
+	// Always remove temporary branches, including on error paths.
+	defer opts.cleanupTempBranches()
+
 	log.Info("Preparing Ancestor branch", "branch_name", opts.AncestorBranch)
 	if err := opts.prepareAncestorBranch(); err != nil {
 		return fmt.Errorf("failed to prepare ancestor branch: %w", err)
@@ -206,7 +209,6 @@ func (opts *Update) Update() error {
 		}
 	}
 
-	opts.cleanupTempBranches()
 	log.Info("Update completed successfully")
 
 	if opts.OpenGhIssue {
