@@ -39,6 +39,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+
+	corev1 "k8s.io/api/core/v1"
+
+	appsv1 "k8s.io/api/apps/v1"
+
 	crewv1 "sigs.k8s.io/kubebuilder/testdata/project-v4/api/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -67,6 +73,15 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	err = crewv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = certmanagerv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = corev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = appsv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

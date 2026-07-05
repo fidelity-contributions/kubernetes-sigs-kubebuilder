@@ -52,6 +52,52 @@ var _ = Describe("Webhook Incremental Scaffolding", func() {
 		kbc.Destroy()
 	})
 
+	Context("When multiple kinds share the same webhook suite", func() {
+		It("should register the scheme of every kind in the suite", func() {
+			By("creating two APIs in the same group and version, each with a defaulting webhook")
+			for _, kind := range []string{"Captain", "FirstMate"} {
+				err := kbc.CreateAPI(
+					"--group", "crew",
+					"--version", "v1",
+					"--kind", kind,
+					"--resource", "--controller",
+					"--make=false",
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = kbc.CreateWebhook(
+					"--group", "crew",
+					"--version", "v1",
+					"--kind", kind,
+					"--defaulting",
+					"--make=false",
+				)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			By("creating a webhook for an external type in the same version")
+			err := kbc.CreateWebhook(
+				"--group", "cert-manager.io",
+				"--version", "v1",
+				"--kind", "Issuer",
+				"--defaulting",
+				"--external-api-path", "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1",
+				"--external-api-domain", "cert-manager.io",
+				"--make=false",
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the suite registers the scheme of the local and the external kinds")
+			suiteFile := filepath.Join(kbc.Dir, "internal/webhook/v1/webhook_suite_test.go")
+			content, err := os.ReadFile(suiteFile)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(string(content)).To(ContainSubstring("err = crewv1.AddToScheme(scheme.Scheme)"))
+			Expect(string(content)).To(ContainSubstring("err = certmanageriov1.AddToScheme(scheme.Scheme)"))
+			Expect(strings.Count(string(content), "crewv1.AddToScheme(scheme.Scheme)")).To(Equal(1))
+		})
+	})
+
 	Context("When creating webhooks incrementally", func() {
 		It("should support adding validation to existing defaulting webhook", func() {
 			By("creating an API")

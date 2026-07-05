@@ -64,7 +64,6 @@ func (f *WebhookSuite) SetTemplateDefaults() error {
 
 	f.TemplateBody = fmt.Sprintf(webhookTestSuiteTemplate,
 		machinery.NewMarkerFor(f.Path, importMarker),
-		f.Resource.ImportAlias(),
 		machinery.NewMarkerFor(f.Path, addSchemeMarker),
 		machinery.NewMarkerFor(f.Path, addWebhookManagerMarker),
 		"%s",
@@ -99,6 +98,11 @@ const (
 	apiImportCodeFragment = `%s "%s"
 `
 
+	addSchemeCodeFragment = `err = %s.AddToScheme(scheme.Scheme)
+Expect(err).NotTo(HaveOccurred())
+
+`
+
 	addWebhookManagerCodeFragment = `err = Setup%sWebhookWithManager(mgr)
 Expect(err).NotTo(HaveOccurred())
 
@@ -117,7 +121,11 @@ func (f *WebhookSuite) GetCodeFragments() machinery.CodeFragmentsMap {
 
 	// Generate add webhookManager code fragments
 	addWebhookManager := make([]string, 0, 1)
-	imports = append(imports, fmt.Sprintf(apiImportCodeFragment, f.Resource.ImportAlias(), f.Resource.Path))
+	// The API import is only used by the AddToScheme call, so add both together.
+	if f.Resource.Path != "" {
+		imports = append(imports, fmt.Sprintf(apiImportCodeFragment, f.Resource.ImportAlias(), f.Resource.Path))
+		addScheme = append(addScheme, fmt.Sprintf(addSchemeCodeFragment, f.Resource.ImportAlias()))
+	}
 	addWebhookManager = append(addWebhookManager, fmt.Sprintf(addWebhookManagerCodeFragment, f.Resource.Kind))
 
 	// Only store code fragments in the map if the slices are non-empty
@@ -185,9 +193,6 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	var err error
-	err = %s.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
 	%s
 
 	By("bootstrapping test environment")
