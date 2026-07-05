@@ -142,5 +142,16 @@ var _ = Describe("kubebuilder", func() {
 				InstallMethod:      helpers.InstallMethodKustomize,
 			})
 		})
+
+		It("should generate a runnable project with cluster-scoped "+
+			"Server-Side Apply (--ssa --namespaced=false)", func() {
+			helpers.GenerateV4WithSSAClusterScoped(kbc)
+			helpers.Run(kbc, helpers.RunOptions{
+				HasWebhook:         false,
+				HasMetrics:         true,
+				HasNetworkPolicies: false,
+				InstallMethod:      helpers.InstallMethodKustomize,
+			})
+		})
 	})
 })

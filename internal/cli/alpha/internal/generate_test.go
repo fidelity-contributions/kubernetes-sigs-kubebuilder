@@ -540,6 +540,31 @@ var _ = Describe("generate: get-args-helpers", func() {
 				Expect(getAPIResourceFlags(res)).To(ContainElements("--resource", "--namespaced=false", "--controller=false"))
 			})
 		})
+
+		Context("for Server-Side Apply", func() {
+			It("includes --ssa only when SSA is enabled on the resource", func() {
+				res.API.CRDVersion = "v1"
+				res.API.Namespaced = true
+				res.API.SSA = true
+				Expect(getAPIResourceFlags(res)).To(ContainElements(
+					"--resource", "--namespaced", "--ssa", "--controller=false"))
+			})
+
+			It("omits --ssa when SSA is disabled on the resource", func() {
+				res.API.CRDVersion = "v1"
+				res.API.Namespaced = true
+				res.API.SSA = false
+				Expect(getAPIResourceFlags(res)).NotTo(ContainElement("--ssa"))
+			})
+
+			It("omits --ssa for resource-less entries (--resource=false)", func() {
+				// A nil API means --resource=false; --ssa must never be emitted.
+				res.API = nil
+				flags := getAPIResourceFlags(res)
+				Expect(flags).To(ContainElement("--resource=false"))
+				Expect(flags).NotTo(ContainElement("--ssa"))
+			})
+		})
 	})
 
 	// getWebhookResourceFlags
