@@ -35,7 +35,7 @@ var (
 
 // isHelpFlag checks if the given string is a help flag
 func isHelpFlag(s string) bool {
-	return s == "--help" || s == "-h" || s == "help"
+	return s == helpFlagArg || s == "-h" || s == kubebuilderSubcommandHelp
 }
 
 // getShortKey converts a full plugin key to a short display key

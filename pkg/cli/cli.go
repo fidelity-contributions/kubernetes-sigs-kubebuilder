@@ -21,6 +21,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -41,11 +42,16 @@ const (
 	pluginsFlag        = "plugins"
 	pluginsFlagArg     = "--plugins"
 	projectVersionFlag = "project-version"
+	helpFlagArg        = "--help"
+	shellZsh           = "zsh"
 
-	kubebuilderCommandName    = "kubebuilder"
-	kubebuilderSubcommandInit = "init"
-	pluginGoKubebuilderV4     = "go.kubebuilder.io/v4"
-	pluginGoKubebuilderV2     = "go.kubebuilder.io/v2"
+	kubebuilderCommandName          = "kubebuilder"
+	kubebuilderSubcommandHelp       = "help"
+	kubebuilderSubcommandInit       = "init"
+	kubebuilderSubcommandVersion    = "version"
+	kubebuilderSubcommandCompletion = "completion"
+	pluginGoKubebuilderV4           = "go.kubebuilder.io/v4"
+	pluginGoKubebuilderV2           = "go.kubebuilder.io/v2"
 
 	pluginsFlagDescription = "Comma-separated list of plugin keys to use. " +
 		"If unset, Kubebuilder uses the plugin chain from PROJECT or the CLI default"
@@ -182,7 +188,9 @@ func (c *CLI) buildCmd() error {
 
 	// Resolve plugins for project version and plugin keys.
 	if err := c.resolvePlugins(); err != nil {
-		return err
+		if !shouldIgnoreConfigLoadError(os.Args[1:]) {
+			return err
+		}
 	}
 
 	// Add the subcommands
@@ -200,7 +208,11 @@ func (c *CLI) getInfo() error {
 	if err := c.getInfoFromConfigFile(); errors.Is(err, os.ErrNotExist) {
 		hasConfigFile = false
 	} else if err != nil {
-		return err
+		if shouldIgnoreConfigLoadError(os.Args[1:]) {
+			hasConfigFile = false
+		} else {
+			return err
+		}
 	}
 
 	// We can't early return here in case a project configuration file was found because
@@ -245,33 +257,55 @@ func (c *CLI) getInfoFromConfigFile() error {
 	return c.getInfoFromConfig(cfg.Config())
 }
 
+// positionalArgs returns arguments that are not flags or flag values.
+func positionalArgs(args []string) []string {
+	positional := []string{}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			positional = append(positional, arg)
+			continue
+		}
+
+		// A flag in --flag=value form consumes no additional argument.
+		if strings.Contains(arg, "=") {
+			continue
+		}
+
+		// A flag consumes the following argument only when it is not another flag.
+		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			i++
+		}
+	}
+
+	return positional
+}
+
+// hasOnlyRootFlags returns true when args consists solely of root flags and their values.
+func hasOnlyRootFlags(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case pluginsFlagArg, "--" + projectVersionFlag:
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+		default:
+			if strings.HasPrefix(args[i], pluginsFlagArg+"=") ||
+				strings.HasPrefix(args[i], "--"+projectVersionFlag+"=") {
+				continue
+			}
+			return false
+		}
+	}
+
+	return true
+}
+
 // isAlphaGenerateCommand checks if the command invocation is `kubebuilder alpha generate`
 // by scanning os.Args (excluding global flags). It returns true if "alpha" is followed by "generate".
 func isAlphaGenerateCommand(args []string) bool {
-	positional := []string{}
-	skip := false
-
-	for i := range args {
-		arg := args[i]
-
-		// Skip flags and their values
-		if strings.HasPrefix(arg, "-") {
-			// If the flag is in --flag=value format, skip only this one
-			if strings.Contains(arg, "=") {
-				continue
-			}
-			// If it's --flag value format, skip next one too
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-				skip = true
-			}
-			continue
-		}
-		if skip {
-			skip = false
-			continue
-		}
-		positional = append(positional, arg)
-	}
+	positional := positionalArgs(args)
 
 	// Check for `alpha generate` in positional arguments
 	for i := 0; i < len(positional)-1; i++ {
@@ -281,6 +315,24 @@ func isAlphaGenerateCommand(args []string) bool {
 	}
 
 	return false
+}
+
+// shouldIgnoreConfigLoadError returns true for commands that do not require a valid PROJECT file.
+// This keeps context-free commands like help, version, and completion working from arbitrary directories.
+func shouldIgnoreConfigLoadError(args []string) bool {
+	if slices.ContainsFunc(args, isHelpFlag) {
+		return true
+	}
+
+	positional := positionalArgs(args)
+	// With no subcommand, Cobra displays root help. Configuration is not required.
+	if len(positional) == 0 {
+		return len(args) == 0 || hasOnlyRootFlags(args)
+	}
+
+	return positional[0] == kubebuilderSubcommandHelp ||
+		positional[0] == kubebuilderSubcommandVersion ||
+		positional[0] == kubebuilderSubcommandCompletion
 }
 
 // patchProjectFileInMemoryIfNeeded updates deprecated plugin keys in the PROJECT file in place,

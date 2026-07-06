@@ -78,6 +78,13 @@ func hasSubCommand(cmd *cobra.Command, name string) bool {
 	return false
 }
 
+func filesystemWithInvalidProjectPath() machinery.Filesystem {
+	fs := machinery.Filesystem{FS: afero.NewBasePathFs(afero.NewOsFs(), GinkgoT().TempDir())}
+	Expect(fs.FS.Mkdir("PROJECT", machinery.DefaultDirectoryPermission)).To(Succeed())
+
+	return fs
+}
+
 type pluginChainCapturingSubcommand struct {
 	pluginChain []string
 }
@@ -673,7 +680,7 @@ plugins:
 				Expect(hasSubCommand(c.cmd, "version")).To(BeTrue())
 
 				// Test the version command
-				c.cmd.SetArgs([]string{"version"})
+				c.cmd.SetArgs([]string{kubebuilderSubcommandVersion})
 				// Overwrite stdout to read the output and reset it afterwards
 				r, w, _ := os.Pipe()
 				temp := os.Stdout
@@ -690,6 +697,28 @@ plugins:
 				Expect(string(printed)).To(Equal(
 					fmt.Sprintf("%s\n", version)))
 			})
+
+			It("should ignore an invalid PROJECT path for version", func() {
+				const version = "version string"
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, kubebuilderSubcommandVersion}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion(version),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{kubebuilderSubcommandVersion})
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
 		})
 
 		When("enabling completion", func() {
@@ -701,6 +730,165 @@ plugins:
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(hasSubCommand(c.cmd, "completion")).To(BeTrue())
+			})
+
+			It("should ignore an invalid PROJECT path for completion", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, kubebuilderSubcommandCompletion, shellZsh}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{kubebuilderSubcommandCompletion, shellZsh})
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
+		})
+
+		When("requesting help", func() {
+			It("should ignore an invalid PROJECT path when a flag without a value precedes help", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, kubebuilderSubcommandInit, pluginsFlagArg, helpFlagArg}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{kubebuilderSubcommandInit, pluginsFlagArg, helpFlagArg})
+				Expect(c.cmd.Execute()).To(MatchError("help displayed"))
+			})
+
+			It("should ignore an invalid PROJECT path for the help subcommand", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, kubebuilderSubcommandHelp}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{kubebuilderSubcommandHelp})
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
+
+			It("should ignore an invalid PROJECT path for the root command", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
+
+			It("should ignore an invalid PROJECT path for root flags without a subcommand", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, pluginsFlagArg, pluginGoKubebuilderV4}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{pluginsFlagArg, pluginGoKubebuilderV4})
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
+
+			It("should ignore an invalid PROJECT path when help is requested after a subcommand", func() {
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, kubebuilderSubcommandInit, helpFlagArg}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithVersion("version string"),
+					WithCompletion(),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{kubebuilderSubcommandInit, helpFlagArg})
+				Expect(c.cmd.Execute()).To(Succeed())
+			})
+
+			It("should return a configuration error for commands requiring a project", func() {
+				const (
+					createSubcommand = "create"
+					apiSubcommand    = "api"
+					kindFlagArg      = "--kind"
+				)
+
+				args := os.Args
+				defer func() {
+					os.Args = args
+				}()
+				os.Args = []string{kubebuilderCommandName, createSubcommand, apiSubcommand, kindFlagArg, kubebuilderSubcommandHelp}
+
+				fs := filesystemWithInvalidProjectPath()
+
+				c, err = New(
+					WithPlugins(&golangv4.Plugin{}),
+					WithDefaultPlugins(projectVersion, &golangv4.Plugin{}),
+					WithFilesystem(fs),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				c.cmd.SetArgs([]string{createSubcommand, apiSubcommand, kindFlagArg, kubebuilderSubcommandHelp})
+				Expect(c.cmd.Execute()).To(MatchError(ContainSubstring("failed to read \"PROJECT\" file")))
 			})
 		})
 
