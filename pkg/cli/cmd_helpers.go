@@ -190,6 +190,7 @@ func mergeFlagSetInto(
 	duplicateValues map[string][]pflag.Value,
 	pluginKey string,
 	firstPluginByFlag map[string]string,
+	showPluginPrefix bool,
 ) error {
 	destNames := make(map[string]struct{})
 	dest.VisitAll(func(f *pflag.Flag) {
@@ -205,7 +206,11 @@ func mergeFlagSetInto(
 		existing := dest.Lookup(flag.Name)
 		if _, wasInDest := destNames[flag.Name]; !wasInDest {
 			firstPluginByFlag[flag.Name] = pluginKey
-			existing.Usage = "For plugin (" + pluginKey + "): " + strings.TrimSpace(flag.Usage)
+			if showPluginPrefix {
+				existing.Usage = "For plugin (" + pluginKey + "): " + strings.TrimSpace(flag.Usage)
+			} else {
+				existing.Usage = strings.TrimSpace(flag.Usage)
+			}
 			return
 		}
 		if existing.Value.Type() != flag.Value.Type() {
@@ -217,6 +222,14 @@ func mergeFlagSetInto(
 			return
 		}
 		duplicateValues[flag.Name] = append(duplicateValues[flag.Name], flag.Value)
+		
+		if !showPluginPrefix && len(duplicateValues[flag.Name]) == 1 {
+			// This is the first time we realize the flag is duplicated. We must rewrite the 
+			// first plugin's usage to include its prefix for disambiguation.
+			firstKey := firstPluginByFlag[flag.Name]
+			existing.Usage = "For plugin (" + firstKey + "): " + existing.Usage
+		}
+
 		existing.Usage += " AND for plugin (" + pluginKey + "): " + strings.TrimSpace(flag.Usage)
 	})
 	return err
@@ -280,13 +293,34 @@ func initializationHooks(
 	// duplicate names do not panic; values are synced after parse and help text is aggregated.
 	duplicateValues := make(map[string][]pflag.Value)
 	firstPluginByFlag := make(map[string]string)
+
+	type pluginFlagSet struct {
+		key   string
+		flags *pflag.FlagSet
+	}
+	var flagSets []pluginFlagSet
+
 	for _, tuple := range subcommands {
 		if subcommand, hasFlags := tuple.subcommand.(plugin.HasFlags); hasFlags {
 			tmpSet := pflag.NewFlagSet(cmd.Name(), pflag.ExitOnError)
 			subcommand.BindFlags(tmpSet)
-			if err := mergeFlagSetInto(cmd.Flags(), tmpSet, duplicateValues, tuple.key, firstPluginByFlag); err != nil {
-				return nil, err
+			if tmpSet.HasFlags() {
+				flagSets = append(flagSets, pluginFlagSet{key: tuple.key, flags: tmpSet})
 			}
+		}
+	}
+
+	showPluginPrefix := false
+	for _, arg := range os.Args {
+		if arg == "--plugins" || strings.HasPrefix(arg, "--plugins=") {
+			showPluginPrefix = true
+			break
+		}
+	}
+
+	for _, pfs := range flagSets {
+		if err := mergeFlagSetInto(cmd.Flags(), pfs.flags, duplicateValues, pfs.key, firstPluginByFlag, showPluginPrefix); err != nil {
+			return nil, err
 		}
 	}
 
