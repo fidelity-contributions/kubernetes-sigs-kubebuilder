@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/machinery"
 	"sigs.k8s.io/kubebuilder/v4/pkg/model/resource"
 	"sigs.k8s.io/kubebuilder/v4/pkg/plugin"
+	"sigs.k8s.io/kubebuilder/v4/pkg/plugins/external"
 )
 
 // noResolvedPluginError is returned by subcommands that require a plugin when none was resolved.
@@ -146,7 +147,23 @@ func (c *CLI) applySubcommandHooks(
 		}
 	}
 
-	result, err := initializationHooks(cmd, subcommands, c.metadata())
+	showPluginPrefix := false
+	for _, arg := range os.Args {
+		if isPluginsFlag(arg) {
+			showPluginPrefix = true
+			break
+		}
+	}
+	if !showPluginPrefix {
+		for _, p := range c.resolvedPlugins {
+			if _, isExternal := p.(external.Plugin); isExternal {
+				showPluginPrefix = true
+				break
+			}
+		}
+	}
+
+	result, err := initializationHooks(cmd, subcommands, c.metadata(), showPluginPrefix)
 	if err != nil {
 		cmdErr(cmd, err)
 		return
@@ -222,9 +239,9 @@ func mergeFlagSetInto(
 			return
 		}
 		duplicateValues[flag.Name] = append(duplicateValues[flag.Name], flag.Value)
-		
+
 		if !showPluginPrefix && len(duplicateValues[flag.Name]) == 1 {
-			// This is the first time we realize the flag is duplicated. We must rewrite the 
+			// This is the first time we realize the flag is duplicated. We must rewrite the
 			// first plugin's usage to include its prefix for disambiguation.
 			firstKey := firstPluginByFlag[flag.Name]
 			existing.Usage = "For plugin (" + firstKey + "): " + existing.Usage
@@ -257,6 +274,7 @@ func initializationHooks(
 	cmd *cobra.Command,
 	subcommands []keySubcommandTuple,
 	meta plugin.CLIMetadata,
+	showPluginPrefix bool,
 ) (*initHooksResult, error) {
 	// Update metadata hook.
 	subcmdMeta := plugin.SubcommandMetadata{
@@ -307,14 +325,6 @@ func initializationHooks(
 			if tmpSet.HasFlags() {
 				flagSets = append(flagSets, pluginFlagSet{key: tuple.key, flags: tmpSet})
 			}
-		}
-	}
-
-	showPluginPrefix := false
-	for _, arg := range os.Args {
-		if arg == "--plugins" || strings.HasPrefix(arg, "--plugins=") {
-			showPluginPrefix = true
-			break
 		}
 	}
 

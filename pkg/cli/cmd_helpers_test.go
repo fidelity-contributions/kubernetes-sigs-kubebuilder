@@ -349,7 +349,7 @@ var _ = Describe("cmd_helpers", func() {
 			Expect(flag.Usage).To(Equal(expectedUsage))
 		})
 
-		It("should not show For plugin prefix when showPluginPrefix is false", func() {
+		It("should not show For plugin prefix when showPluginPrefix is false for a single flag", func() {
 			dest := pflag.NewFlagSet("dest", pflag.ExitOnError)
 			goPlugin := pflag.NewFlagSet("go", pflag.ExitOnError)
 			duplicateValues := make(map[string][]pflag.Value)
@@ -364,6 +364,30 @@ var _ = Describe("cmd_helpers", func() {
 			flag := dest.Lookup("force")
 			Expect(flag).NotTo(BeNil())
 			Expect(flag.Usage).To(Equal("overwrite scaffolded files to apply changes"))
+		})
+
+		It("should rewrite with For plugin prefixes when flags collide and showPluginPrefix is false", func() {
+			dest := pflag.NewFlagSet("dest", pflag.ExitOnError)
+			goPlugin := pflag.NewFlagSet("go", pflag.ExitOnError)
+			helmPlugin := pflag.NewFlagSet("helm", pflag.ExitOnError)
+			duplicateValues := make(map[string][]pflag.Value)
+			firstPluginByFlag := make(map[string]string)
+
+			var a, b bool
+			goPlugin.BoolVar(&a, "force", false, "overwrite scaffolded files to apply changes (manual edits may be lost)")
+			helmPlugin.BoolVar(&b, "force", false, "if true, regenerates all the files")
+
+			Expect(mergeFlagSetInto(dest, goPlugin, duplicateValues, "base.go.kubebuilder.io/v4", firstPluginByFlag, false)).
+				NotTo(HaveOccurred())
+
+			Expect(mergeFlagSetInto(dest, helmPlugin, duplicateValues, "helm.kubebuilder.io/v2-alpha", firstPluginByFlag, false)).
+				NotTo(HaveOccurred())
+
+			flag := dest.Lookup("force")
+			Expect(flag).NotTo(BeNil())
+			expectedUsage := "For plugin (base.go.kubebuilder.io/v4): overwrite scaffolded files to apply changes " +
+				"(manual edits may be lost) AND for plugin (helm.kubebuilder.io/v2-alpha): if true, regenerates all the files"
+			Expect(flag.Usage).To(Equal(expectedUsage))
 		})
 
 		It("should return error when same flag name is bound with different value types", func() {
@@ -451,7 +475,7 @@ var _ = Describe("cmd_helpers", func() {
 			}
 			meta := plugin.CLIMetadata{}
 
-			result, err := initializationHooks(cmd, tuples, meta)
+			result, err := initializationHooks(cmd, tuples, meta, false)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.duplicateFlagValues["force"]).To(HaveLen(1), "second plugin's Value recorded as duplicate")
 
