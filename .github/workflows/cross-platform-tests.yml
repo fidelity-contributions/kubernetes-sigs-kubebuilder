@@ -38,6 +38,17 @@ jobs:
       - name: Remove pre-installed kustomize
         run: sudo rm -f /usr/local/bin/kustomize
 
+      # GitHub's macOS runners have hostnames longer than the 63-byte k8s label
+      # limit. kube-apiserver 1.35+ can never create its identity Lease on such
+      # hosts and then deadlocks on SIGTERM, so every envtest teardown times out.
+      # TODO: remove once https://github.com/kubernetes/kubernetes/issues/140242
+      # is fixed in the Kubernetes version used by envtest.
+      - name: Shorten hostname (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          sudo scutil --set HostName kb-macos-runner
+          hostname
+
       - name: Unit Tests
         run: make test-unit
 
