@@ -123,8 +123,12 @@ var _ = Describe("cmd_helpers", func() {
 	Context("shouldShowPluginPrefix", func() {
 		It("should return true if --plugins flag is used", func() {
 			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
-			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins"})).To(BeTrue())
-			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins=go/v4"})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{
+				kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins",
+			})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{
+				kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins=go/v4",
+			})).To(BeTrue())
 		})
 
 		It("should return true if an external plugin is present", func() {
@@ -134,7 +138,9 @@ var _ = Describe("cmd_helpers", func() {
 
 		It("should return false if neither --plugins flag nor external plugin is used", func() {
 			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
-			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--domain", "my-test.example.com"})).To(BeFalse())
+			Expect(c.shouldShowPluginPrefix([]string{
+				kubebuilderCommandName, kubebuilderSubcommandInit, "--domain", "my-test.example.com",
+			})).To(BeFalse())
 		})
 	})
 
