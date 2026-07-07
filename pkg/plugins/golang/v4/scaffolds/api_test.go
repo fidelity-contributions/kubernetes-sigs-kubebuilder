@@ -19,6 +19,8 @@ limitations under the License.
 package scaffolds
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,6 +174,23 @@ var _ = Describe("API scaffolding with Server-Side Apply", func() {
 
 			Expect(content).To(ContainSubstring("// +genclient\n// +genclient:nonNamespaced"))
 			Expect(content).To(ContainSubstring("// +kubebuilder:resource:path=admirals,scope=Cluster"))
+		})
+
+		It("should keep the custom plural in the resource path when SSA is enabled", func() {
+			res := ssaTestResource("Admiral", true)
+			res.Plural = "admirales"
+			content := scaffoldTypes(res, false)
+
+			Expect(content).To(ContainSubstring("// +kubebuilder:resource:path=admirales"))
+		})
+
+		It("should keep the custom plural and scope in the resource path for a cluster-scoped kind with SSA enabled", func() {
+			res := ssaTestResource("Admiral", true)
+			res.Plural = "admirales"
+			res.API.Namespaced = false
+			content := scaffoldTypes(res, false)
+
+			Expect(content).To(ContainSubstring("// +kubebuilder:resource:path=admirales,scope=Cluster"))
 		})
 
 		It("should scaffold the opt-out marker when another kind in the package has SSA enabled", func() {
@@ -330,7 +349,7 @@ package v1
 			navigator := ssaTestResource("Navigator", true)
 			s := &apiScaffolder{config: newSSATestConfig(navigator), resource: navigator}
 
-			Expect(s.updateGroupVersionInfo()).To(Succeed())
+			s.updateGroupVersionInfo()
 
 			content, err := os.ReadFile(gvPath)
 			Expect(err).NotTo(HaveOccurred())
@@ -344,8 +363,8 @@ package v1
 			navigator := ssaTestResource("Navigator", true)
 			s := &apiScaffolder{config: newSSATestConfig(navigator), resource: navigator}
 
-			Expect(s.updateGroupVersionInfo()).To(Succeed())
-			Expect(s.updateGroupVersionInfo()).To(Succeed())
+			s.updateGroupVersionInfo()
+			s.updateGroupVersionInfo()
 
 			content, err := os.ReadFile(gvPath)
 			Expect(err).NotTo(HaveOccurred())
@@ -360,15 +379,65 @@ package v1
 			Expect(cfg.SetMultiGroup()).To(Succeed())
 			s := &apiScaffolder{config: cfg, resource: navigator}
 
-			Expect(s.updateGroupVersionInfo()).To(Succeed())
+			s.updateGroupVersionInfo()
 
 			content, err := os.ReadFile(gvPath)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(content)).To(ContainSubstring("+kubebuilder:ac:generate=true"))
 		})
+
+		It("should warn and continue when the insertion anchor is missing", func() {
+			customized := `// Package v1 was customized and no longer has the generate marker.
+// +groupName=crew.test.io
+package v1
+`
+			gvPath := filepath.Join("api", "v1", "groupversion_info.go")
+			Expect(os.MkdirAll(filepath.Dir(gvPath), 0o755)).To(Succeed())
+			Expect(os.WriteFile(gvPath, []byte(customized), 0o644)).To(Succeed())
+
+			var logOutput bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logOutput, nil)))
+			DeferCleanup(func() { slog.SetDefault(previous) })
+
+			navigator := ssaTestResource("Navigator", true)
+			s := &apiScaffolder{config: newSSATestConfig(navigator), resource: navigator}
+
+			s.updateGroupVersionInfo()
+
+			Expect(logOutput.String()).To(ContainSubstring("marker was not found"))
+			Expect(logOutput.String()).To(ContainSubstring("+kubebuilder:ac:generate=true"))
+			Expect(logOutput.String()).To(ContainSubstring("+kubebuilder:object:generate=true"))
+			// The warning must not echo the file contents.
+			Expect(logOutput.String()).NotTo(ContainSubstring("Package v1 was customized"))
+
+			content, err := os.ReadFile(gvPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(content)).To(Equal(customized))
+		})
+
+		It("should warn and continue when groupversion_info.go does not exist", func() {
+			var logOutput bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logOutput, nil)))
+			DeferCleanup(func() { slog.SetDefault(previous) })
+
+			navigator := ssaTestResource("Navigator", true)
+			s := &apiScaffolder{config: newSSATestConfig(navigator), resource: navigator}
+
+			s.updateGroupVersionInfo()
+
+			Expect(logOutput.String()).To(ContainSubstring("unable to check"))
+			Expect(logOutput.String()).To(ContainSubstring("+kubebuilder:ac:generate=true"))
+		})
 	})
 
 	Describe("addApplyConfigGenToMakefile", func() {
+		//nolint:lll
+		const manifestsLine = `"$(CONTROLLER_GEN)" rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases`
+		//nolint:lll
+		const manifestsHelp = "manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects."
+
 		var makefilePath string
 
 		BeforeEach(func() {
@@ -380,8 +449,8 @@ package v1
 			makefilePath = filepath.Join(tmpDir, "Makefile")
 		})
 
-		It("should add applyconfiguration to the manifests target", func() {
-			content := "manifests: controller-gen\n\t" + makefileOldManifestsLine + "\n"
+		It("should add applyconfiguration to the manifests target and its help text", func() {
+			content := manifestsHelp + "\n\t" + manifestsLine + "\n"
 			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
 
 			updated, err := addApplyConfigGenToMakefile(makefilePath)
@@ -390,11 +459,12 @@ package v1
 
 			result, err := os.ReadFile(makefilePath)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(result)).To(ContainSubstring(makefileNewManifestsLine))
+			Expect(string(result)).To(ContainSubstring(makefileManifestsGeneratorsWithSSA + ` paths="./..."`))
+			Expect(string(result)).To(ContainSubstring(makefileManifestsHelpWithSSA))
 		})
 
-		It("should update the manifests target help text when it was not customized", func() {
-			content := makefileOldManifestsHelp + "\n\t" + makefileOldManifestsLine + "\n"
+		It("should update a manifests target with an unquoted CONTROLLER_GEN", func() {
+			content := manifestsHelp + "\n\t$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths=\"./...\"\n"
 			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
 
 			updated, err := addApplyConfigGenToMakefile(makefilePath)
@@ -403,11 +473,11 @@ package v1
 
 			result, err := os.ReadFile(makefilePath)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(result)).To(ContainSubstring(makefileNewManifestsHelp))
+			Expect(string(result)).To(ContainSubstring(makefileManifestsGeneratorsWithSSA))
 		})
 
 		It("should skip a Makefile that already runs applyconfiguration generation", func() {
-			content := "manifests: controller-gen\n\t" + makefileNewManifestsLine + "\n"
+			content := manifestsHelp + "\n\t" + `"$(CONTROLLER_GEN)" ` + makefileManifestsGeneratorsWithSSA + "\n"
 			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
 
 			updated, err := addApplyConfigGenToMakefile(makefilePath)
@@ -415,12 +485,65 @@ package v1
 			Expect(updated).To(BeFalse())
 		})
 
-		It("should return an error when the manifests line is not found", func() {
-			content := "manifests: controller-gen\n\tcustom-generator paths=\"./...\"\n"
+		It("should not duplicate anything when run more than once", func() {
+			content := manifestsHelp + "\n\t" + manifestsLine + "\n"
+			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
+
+			updated, err := addApplyConfigGenToMakefile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated).To(BeTrue())
+
+			afterFirstRun, err := os.ReadFile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err = addApplyConfigGenToMakefile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated).To(BeFalse())
+
+			afterSecondRun, err := os.ReadFile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(afterSecondRun)).To(Equal(string(afterFirstRun)))
+			Expect(strings.Count(string(afterSecondRun), "applyconfiguration:headerFile")).To(Equal(1))
+			Expect(strings.Count(string(afterSecondRun), "and ApplyConfiguration types")).To(Equal(1))
+		})
+
+		It("should update only the manifests target when another target runs the same generators", func() {
+			content := "manifests-fast: controller-gen\n\t" + manifestsLine + "\n" +
+				manifestsHelp + "\n\t" + manifestsLine + "\n"
+			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
+
+			updated, err := addApplyConfigGenToMakefile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated).To(BeTrue())
+
+			result, err := os.ReadFile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.Count(string(result), "applyconfiguration:headerFile")).To(Equal(1))
+			Expect(string(result)).To(ContainSubstring("manifests-fast: controller-gen\n\t" + manifestsLine))
+		})
+
+		It("should return an error and change nothing when the help comment was customized", func() {
+			content := "manifests: controller-gen ## My custom help\n\t" + manifestsLine + "\n"
 			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
 
 			_, err := addApplyConfigGenToMakefile(makefilePath)
 			Expect(err).To(HaveOccurred())
+
+			result, err := os.ReadFile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(Equal(content))
+		})
+
+		It("should return an error and change nothing when the manifests generators are not found", func() {
+			content := manifestsHelp + "\n\tcustom-generator paths=\"./...\"\n"
+			Expect(os.WriteFile(makefilePath, []byte(content), 0o644)).To(Succeed())
+
+			_, err := addApplyConfigGenToMakefile(makefilePath)
+			Expect(err).To(HaveOccurred())
+
+			result, err := os.ReadFile(makefilePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(Equal(content))
 		})
 
 		It("should return an error when the Makefile does not exist", func() {

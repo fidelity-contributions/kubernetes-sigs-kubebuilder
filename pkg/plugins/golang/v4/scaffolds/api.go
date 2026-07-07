@@ -22,6 +22,7 @@ import (
 	log "log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -113,9 +114,7 @@ func (s *apiScaffolder) Scaffold() error {
 		// If SSA is enabled and groupversion_info.go already exists, we need to inject the marker
 		// (the template only runs when creating a new version package)
 		if ssaEnabled {
-			if err := s.updateGroupVersionInfo(); err != nil {
-				return fmt.Errorf("error adding ac:generate marker: %w", err)
-			}
+			s.updateGroupVersionInfo()
 			// The ac:generate package marker enables generation for every kind in the
 			// group/version, so kinds scaffolded without SSA must opt out explicitly
 			if resources, err := s.config.GetResources(); err == nil {
@@ -184,44 +183,65 @@ func (s *apiScaffolder) apiPackageDir() string {
 	return filepath.Join("api", s.resource.Version)
 }
 
+// acGenerateMarkerHint tells users how to apply the marker manually when
+// scaffolding could not do it for them.
+const acGenerateMarkerHint = "Add '// +kubebuilder:ac:generate=true' to the package comment in " +
+	"groupversion_info.go, alongside the other Kubebuilder markers (for example right after " +
+	"'// +kubebuilder:object:generate=true'), to enable ApplyConfiguration generation for this group/version"
+
 // updateGroupVersionInfo adds the applyconfiguration generation marker
-// when groupversion_info.go already exists (e.g., adding a second API to an existing version)
-func (s *apiScaffolder) updateGroupVersionInfo() error {
+// when groupversion_info.go already exists (e.g., adding a second API to an existing version).
+// On failure, logs a warning and does not stop scaffolding.
+func (s *apiScaffolder) updateGroupVersionInfo() {
 	groupVersionPath := filepath.Join(s.apiPackageDir(), "groupversion_info.go")
 
 	// Check if marker already exists to avoid duplicates when using --force or multiple kinds
 	hasMarker, err := util.HasFileContentWith(groupVersionPath, "+kubebuilder:ac:generate=true")
 	if err != nil {
-		return fmt.Errorf("error checking for existing ac:generate marker: %w", err)
+		log.Warn("unable to check the '+kubebuilder:ac:generate=true' marker. "+acGenerateMarkerHint,
+			"path", groupVersionPath, "error", err)
+		return
 	}
 	if hasMarker {
-		return nil
+		return
 	}
 
-	// Add the marker after the object:generate marker
+	// Add the marker after the object:generate marker. The anchor is checked
+	// first because the InsertCode error would echo the whole file.
 	marker := `// +kubebuilder:object:generate=true`
+	hasAnchor, err := util.HasFileContentWith(groupVersionPath, marker)
+	if err != nil {
+		log.Warn("unable to check the '+kubebuilder:object:generate=true' marker. "+acGenerateMarkerHint,
+			"path", groupVersionPath, "error", err)
+		return
+	}
+	if !hasAnchor {
+		log.Warn("the '+kubebuilder:object:generate=true' marker was not found. "+acGenerateMarkerHint,
+			"path", groupVersionPath)
+		return
+	}
+
 	insert := "\n// +kubebuilder:ac:generate=true"
 	if err := util.InsertCode(groupVersionPath, marker, insert); err != nil {
-		return fmt.Errorf("error adding ac:generate marker: %w", err)
+		log.Warn("unable to add the '+kubebuilder:ac:generate=true' marker. "+acGenerateMarkerHint,
+			"path", groupVersionPath, "error", err)
 	}
-
-	return nil
 }
 
 // Makefile injection constants
 const (
 	makefileApplyConfigurationMarker = "applyconfiguration"
 
-	// The manifests target has a single consistent format — no boilerplate variants.
-	//nolint:lll
-	makefileOldManifestsLine = "\"$(CONTROLLER_GEN)\" rbac:roleName=manager-role crd webhook paths=\"./...\" output:crd:artifacts:config=config/crd/bases"
-	//nolint:lll
-	makefileNewManifestsLine = "\"$(CONTROLLER_GEN)\" rbac:roleName=manager-role crd webhook applyconfiguration:headerFile=\"hack/boilerplate.go.txt\" paths=\"./...\" output:crd:artifacts:config=config/crd/bases"
+	// The generators of the manifests target. Only this fragment is matched,
+	// so customized flags elsewhere in the line do not block the update.
+	makefileManifestsGeneratorsWithoutSSA = "rbac:roleName=manager-role crd webhook"
+	makefileManifestsGeneratorsWithSSA    = makefileManifestsGeneratorsWithoutSSA +
+		` applyconfiguration:headerFile="hack/boilerplate.go.txt"`
 
-	//nolint:lll
-	makefileOldManifestsHelp = "manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects."
-	//nolint:lll
-	makefileNewManifestsHelp = "manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects and ApplyConfiguration types."
+	makefileManifestsHelpWithoutSSA = "## Generate WebhookConfiguration, ClusterRole and " +
+		"CustomResourceDefinition objects."
+	makefileManifestsHelpWithSSA = "## Generate WebhookConfiguration, ClusterRole and " +
+		"CustomResourceDefinition objects and ApplyConfiguration types."
 )
 
 // isFirstSSAAPI checks if this is the first API with SSA enabled in the project.
@@ -350,30 +370,24 @@ func (s *apiScaffolder) updateMakefile() {
 // addApplyConfigGenToMakefile adds applyconfiguration generation to the manifests target.
 // Returns false when the Makefile already runs applyconfiguration generation.
 func addApplyConfigGenToMakefile(makefilePath string) (bool, error) {
-	info, err := os.Stat(makefilePath)
+	hasApplyConfig, err := util.HasFileContentWith(makefilePath, makefileApplyConfigurationMarker)
 	if err != nil {
-		return false, fmt.Errorf("failed to stat file %q: %w", makefilePath, err)
+		return false, fmt.Errorf("checking for applyconfiguration generation: %w", err)
 	}
-	//nolint:gosec // false positive
-	content, err := os.ReadFile(makefilePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to read file %q: %w", makefilePath, err)
-	}
-
-	text := string(content)
-	if strings.Contains(text, makefileApplyConfigurationMarker) {
+	if hasApplyConfig {
 		return false, nil
 	}
 
-	if !strings.Contains(text, makefileOldManifestsLine) {
-		return false, fmt.Errorf("manifests controller-gen line not found in %q", makefilePath)
-	}
-
-	text = strings.Replace(text, makefileOldManifestsLine, makefileNewManifestsLine, 1)
-	// Best effort: keep the manifests target help accurate when it was not customized
-	text = strings.Replace(text, makefileOldManifestsHelp, makefileNewManifestsHelp, 1)
-	if err := os.WriteFile(makefilePath, []byte(text), info.Mode()); err != nil {
-		return false, fmt.Errorf("failed to write file %q: %w", makefilePath, err)
+	// One replacement updates the help comment and the recipe together, so a
+	// customized Makefile fails with no partial edits. The pattern is anchored
+	// on the manifests target, so another target running the same generators
+	// is not the one updated.
+	pattern := "(?m)^(manifests: controller-gen )" +
+		regexp.QuoteMeta(makefileManifestsHelpWithoutSSA) +
+		"\n(\t.*?)" + regexp.QuoteMeta(makefileManifestsGeneratorsWithoutSSA)
+	replacement := "${1}" + makefileManifestsHelpWithSSA + "\n${2}" + makefileManifestsGeneratorsWithSSA
+	if err := util.ReplaceRegexInFile(makefilePath, pattern, replacement); err != nil {
+		return false, fmt.Errorf("failed to update the manifests target in %q: %w", makefilePath, err)
 	}
 	return true, nil
 }
