@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -180,17 +181,13 @@ func (c *CLI) appendPluginTable(cmd *cobra.Command, filter func(plugin.Plugin) b
 // The prefix is shown if the user explicitly requested it via the --plugins flag, or if
 // any of the resolved plugins is an external plugin.
 func (c *CLI) shouldShowPluginPrefix(args []string) bool {
-	for _, arg := range args {
-		if isPluginsFlag(arg) {
-			return true
-		}
+	if slices.ContainsFunc(args, isPluginsFlag) {
+		return true
 	}
-	for _, p := range c.resolvedPlugins {
-		if _, isExternal := p.(external.Plugin); isExternal {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(c.resolvedPlugins, func(p plugin.Plugin) bool {
+		_, isExternal := p.(external.Plugin)
+		return isExternal
+	})
 }
 
 // initHooksResult holds the result of initializationHooks: resource options and
@@ -333,7 +330,8 @@ func initializationHooks(
 	}
 
 	for _, pfs := range flagSets {
-		if err := mergeFlagSetInto(cmd.Flags(), pfs.flags, duplicateValues, pfs.key, firstPluginByFlag, showPluginPrefix); err != nil {
+		err := mergeFlagSetInto(cmd.Flags(), pfs.flags, duplicateValues, pfs.key, firstPluginByFlag, showPluginPrefix)
+		if err != nil {
 			return nil, err
 		}
 	}

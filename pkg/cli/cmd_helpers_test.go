@@ -123,18 +123,18 @@ var _ = Describe("cmd_helpers", func() {
 	Context("shouldShowPluginPrefix", func() {
 		It("should return true if --plugins flag is used", func() {
 			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
-			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--plugins"})).To(BeTrue())
-			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--plugins=go/v4"})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins"})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--plugins=go/v4"})).To(BeTrue())
 		})
 
 		It("should return true if an external plugin is present", func() {
 			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}, external.Plugin{}}}
-			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init"})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit})).To(BeTrue())
 		})
 
 		It("should return false if neither --plugins flag nor external plugin is used", func() {
 			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
-			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--domain", "example.com"})).To(BeFalse())
+			Expect(c.shouldShowPluginPrefix([]string{kubebuilderCommandName, kubebuilderSubcommandInit, "--domain", "my-test.example.com"})).To(BeFalse())
 		})
 	})
 
@@ -399,8 +399,8 @@ var _ = Describe("cmd_helpers", func() {
 			Expect(mergeFlagSetInto(dest, goPlugin, duplicateValues, "base.go.kubebuilder.io/v4", firstPluginByFlag, false)).
 				NotTo(HaveOccurred())
 
-			Expect(mergeFlagSetInto(dest, helmPlugin, duplicateValues, "helm.kubebuilder.io/v2-alpha", firstPluginByFlag, false)).
-				NotTo(HaveOccurred())
+			Expect(mergeFlagSetInto(dest, helmPlugin, duplicateValues,
+				"helm.kubebuilder.io/v2-alpha", firstPluginByFlag, false)).NotTo(HaveOccurred())
 
 			flag := dest.Lookup("force")
 			Expect(flag).NotTo(BeNil())
@@ -460,8 +460,10 @@ var _ = Describe("cmd_helpers", func() {
 
 			duplicateValues := make(map[string][]pflag.Value)
 			firstPluginByFlag := make(map[string]string)
-			Expect(mergeFlagSetInto(cmdFlags, pluginA, duplicateValues, "pluginA/v1", firstPluginByFlag, true)).NotTo(HaveOccurred())
-			Expect(mergeFlagSetInto(cmdFlags, pluginB, duplicateValues, "pluginB/v1", firstPluginByFlag, true)).NotTo(HaveOccurred())
+			Expect(mergeFlagSetInto(cmdFlags, pluginA, duplicateValues,
+				"pluginA/v1", firstPluginByFlag, true)).NotTo(HaveOccurred())
+			Expect(mergeFlagSetInto(cmdFlags, pluginB, duplicateValues,
+				"pluginB/v1", firstPluginByFlag, true)).NotTo(HaveOccurred())
 
 			Expect(cmdFlags.Parse([]string{flagForce, flagValueTrue})).NotTo(HaveOccurred())
 			syncDuplicateFlags(cmdFlags, duplicateValues)
