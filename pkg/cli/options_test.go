@@ -35,7 +35,10 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/plugin"
 )
 
-const domainFlagArg = "--domain"
+const (
+	domainFlagArg = "--domain"
+	exampleDomain = "example.com"
+)
 
 var _ = Describe("Discover external plugins", func() {
 	Context("with valid plugins root path", func() {
@@ -474,7 +477,7 @@ var _ = Describe("Discover external plugins", func() {
 				pluginsFlagArg,
 				"myexternalplugin/v1",
 				domainFlagArg,
-				"example.com",
+				exampleDomain,
 				"--binary-flag",
 				"--license",
 				"apache2",
@@ -484,7 +487,7 @@ var _ = Describe("Discover external plugins", func() {
 			args := parseExternalPluginArgs()
 			Expect(args).Should(ContainElements(
 				domainFlagArg,
-				"example.com",
+				exampleDomain,
 				"--binary-flag",
 				"--license",
 				"apache2",
@@ -530,13 +533,13 @@ var _ = Describe("Discover external plugins", func() {
 				kubebuilderSubcommandInit,
 				"--plugins=myexternalplugin/v1",
 				domainFlagArg,
-				"example.com",
+				exampleDomain,
 			}
 
 			args := parseExternalPluginArgs()
 			Expect(args).Should(ContainElements(
 				domainFlagArg,
-				"example.com",
+				exampleDomain,
 			))
 			Expect(args).ShouldNot(ContainElement("--plugins=myexternalplugin/v1"))
 		})

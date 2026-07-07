@@ -80,7 +80,7 @@ var _ = Describe("init", func() {
 	Context("flag descriptions", func() {
 		It("should use the same project version description for root and init", func() {
 			cli := CLI{
-				commandName:           "kubebuilder",
+				commandName:           kubebuilderCommandName,
 				defaultProjectVersion: config.Version{Number: 3},
 				plugins:               map[string]plugin.Plugin{},
 			}
