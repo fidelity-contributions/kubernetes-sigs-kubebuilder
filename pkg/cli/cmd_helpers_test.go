@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/kubebuilder/v4/pkg/config"
 	"sigs.k8s.io/kubebuilder/v4/pkg/machinery"
 	"sigs.k8s.io/kubebuilder/v4/pkg/plugin"
+	"sigs.k8s.io/kubebuilder/v4/pkg/plugins/external"
 )
 
 var _ = Describe("cmd_helpers", func() {
@@ -116,6 +117,24 @@ var _ = Describe("cmd_helpers", func() {
 			chain := []string{flagKey1, flagKey2, flagKey2}
 			result := moveKeyToFront(chain, flagKey2)
 			Expect(result).To(Equal([]string{flagKey2, flagKey1}))
+		})
+	})
+
+	Context("shouldShowPluginPrefix", func() {
+		It("should return true if --plugins flag is used", func() {
+			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
+			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--plugins"})).To(BeTrue())
+			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--plugins=go/v4"})).To(BeTrue())
+		})
+
+		It("should return true if an external plugin is present", func() {
+			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}, external.Plugin{}}}
+			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init"})).To(BeTrue())
+		})
+
+		It("should return false if neither --plugins flag nor external plugin is used", func() {
+			c := &CLI{resolvedPlugins: []plugin.Plugin{mockPlugin{}}}
+			Expect(c.shouldShowPluginPrefix([]string{"kubebuilder", "init", "--domain", "example.com"})).To(BeFalse())
 		})
 	})
 

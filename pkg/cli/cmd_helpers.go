@@ -147,22 +147,7 @@ func (c *CLI) applySubcommandHooks(
 		}
 	}
 
-	showPluginPrefix := false
-	for _, arg := range os.Args {
-		if isPluginsFlag(arg) {
-			showPluginPrefix = true
-			break
-		}
-	}
-	if !showPluginPrefix {
-		for _, p := range c.resolvedPlugins {
-			if _, isExternal := p.(external.Plugin); isExternal {
-				showPluginPrefix = true
-				break
-			}
-		}
-	}
-
+	showPluginPrefix := c.shouldShowPluginPrefix(os.Args)
 	result, err := initializationHooks(cmd, subcommands, c.metadata(), showPluginPrefix)
 	if err != nil {
 		cmdErr(cmd, err)
@@ -189,6 +174,23 @@ func (c *CLI) applySubcommandHooks(
 func (c *CLI) appendPluginTable(cmd *cobra.Command, filter func(plugin.Plugin) bool, title string) {
 	pluginTable := c.getPluginTableFilteredForSubcommand(filter)
 	cmd.Long = fmt.Sprintf("%s\n%s:\n\n%s\n", cmd.Long, title, pluginTable)
+}
+
+// shouldShowPluginPrefix returns true if the plugin prefix should be shown in help output.
+// The prefix is shown if the user explicitly requested it via the --plugins flag, or if
+// any of the resolved plugins is an external plugin.
+func (c *CLI) shouldShowPluginPrefix(args []string) bool {
+	for _, arg := range args {
+		if isPluginsFlag(arg) {
+			return true
+		}
+	}
+	for _, p := range c.resolvedPlugins {
+		if _, isExternal := p.(external.Plugin); isExternal {
+			return true
+		}
+	}
+	return false
 }
 
 // initHooksResult holds the result of initializationHooks: resource options and
@@ -244,7 +246,9 @@ func mergeFlagSetInto(
 			// This is the first time we realize the flag is duplicated. We must rewrite the
 			// first plugin's usage to include its prefix for disambiguation.
 			firstKey := firstPluginByFlag[flag.Name]
-			existing.Usage = "For plugin (" + firstKey + "): " + existing.Usage
+			if firstKey != "" {
+				existing.Usage = "For plugin (" + firstKey + "): " + existing.Usage
+			}
 		}
 
 		existing.Usage += " AND for plugin (" + pluginKey + "): " + strings.TrimSpace(flag.Usage)
