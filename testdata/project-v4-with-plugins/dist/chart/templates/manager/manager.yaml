@@ -93,7 +93,7 @@ spec:
         command:
         - /manager
         env:
-{{- if or .Values.manager.env (and (kindIs "map" .Values.manager.envOverrides) (not (empty .Values.manager.envOverrides))) }}
+        {{- if or .Values.manager.env (and (kindIs "map" .Values.manager.envOverrides) (not (empty .Values.manager.envOverrides))) }}
           {{- if .Values.manager.env }}
           {{- toYaml .Values.manager.env | nindent 10 }}
           {{- end }}

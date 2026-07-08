@@ -86,55 +86,75 @@ func wrapBlock(match, condition string) string {
 const (
 	k8sObjectSpecField     = "spec"
 	k8sObjectTemplateField = "template"
+	k8sContainersFieldName = "containers"
 )
 
 var (
 	podTemplateContainersPath = []string{
-		k8sObjectSpecField, k8sObjectTemplateField, k8sObjectSpecField, "containers",
+		k8sObjectSpecField, k8sObjectTemplateField, k8sObjectSpecField, k8sContainersFieldName,
 	}
 	podTemplateInitContainersPath = []string{
 		k8sObjectSpecField, k8sObjectTemplateField, k8sObjectSpecField, "initContainers",
 	}
 )
 
-// FindManagerContainerRange returns the 0-based inclusive line range of the manager container in yamlContent.
+// FindManagerContainerRange returns the 0-based inclusive line range [start, end]
+// of the manager container in yamlContent.
 // Returns (-1, -1) when not found; callers use this to restrict substitutions to the manager only.
 func FindManagerContainerRange(yamlContent string) (int, int) {
-	containerName := GetDefaultContainerName(yamlContent)
+	name := GetDefaultContainerName(yamlContent)
 	lines := strings.Split(yamlContent, "\n")
 
-	start := -1
-	containerIndentLen := -1
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "- name: "+containerName {
-			continue
-		}
-		_, indentLen := LeadingWhitespace(line)
-		start = i
-		containerIndentLen = indentLen
-		break
-	}
-
-	if start == -1 {
+	listLine, listIndent := findListField(lines, k8sContainersFieldName+":")
+	if listLine < 0 {
 		return -1, -1
 	}
 
-	end := len(lines) - 1
-	for i := start + 1; i < len(lines); i++ {
+	nameField := "name: " + name
+	itemStart := -1
+	itemChildIndent := -1
+	found := false
+
+	for i := listLine + 1; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(lines[i])
 		if trimmed == "" {
 			continue
 		}
-		_, indentLen := LeadingWhitespace(lines[i])
-		if indentLen <= containerIndentLen && strings.HasPrefix(trimmed, "- ") {
-			end = i - 1
+		_, indent := LeadingWhitespace(lines[i])
+
+		if indent > listIndent {
+			if itemStart >= 0 && indent == itemChildIndent && trimmed == nameField {
+				found = true
+			}
+			continue
+		}
+
+		if found {
+			return itemStart, i - 1
+		}
+		if indent < listIndent || !strings.HasPrefix(trimmed, "- ") {
 			break
 		}
+		itemStart = i
+		itemChildIndent = indent + 2
+		if trimmed == "- "+nameField {
+			found = true
+		}
 	}
+	if found {
+		return itemStart, len(lines) - 1
+	}
+	return -1, -1
+}
 
-	return start, end
+func findListField(lines []string, field string) (int, int) {
+	for i, line := range lines {
+		if strings.TrimSpace(line) == field {
+			_, indent := LeadingWhitespace(line)
+			return i, indent
+		}
+	}
+	return -1, -1
 }
 
 // ExtractContainerNames returns all container and initContainer names from a Deployment.
