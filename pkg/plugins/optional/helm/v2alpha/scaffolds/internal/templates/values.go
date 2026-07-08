@@ -537,7 +537,8 @@ serviceAccount:
   # Install default ServiceAccount provided
   enabled: true
 
-  ## Existing ServiceAccount name (only when enabled=false)
+  ## Existing ServiceAccount name (required when enabled=false)
+  ## Set to "default" to use the namespace default ServiceAccount
   ## Note: When enabled=true, respects nameOverride/fullnameOverride
   ##
   # name: ""

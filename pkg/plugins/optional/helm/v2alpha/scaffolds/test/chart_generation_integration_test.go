@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -351,7 +352,9 @@ var _ = Describe("Chart Generation Integration Tests", func() {
 	})
 
 	Context("ServiceAccount name resolution (rendered)", func() {
-		renderChart := func(setArgs ...string) string {
+		const generatedName = "my-release-test-project-controller-manager"
+
+		runHelmTemplate := func(setArgs ...string) (string, error) {
 			if _, err := exec.LookPath("helm"); err != nil {
 				Skip("helm binary not found on PATH; skipping render-based test")
 			}
@@ -366,36 +369,150 @@ var _ = Describe("Chart Generation Integration Tests", func() {
 			chartPath := filepath.Join(tmpDir, outputDir, "chart")
 			args := append([]string{"template", "my-release", chartPath, "--namespace", "my-namespace"}, setArgs...)
 			out, err := exec.Command("helm", args...).CombinedOutput()
-			Expect(err).NotTo(HaveOccurred(), "helm template failed: %s", string(out))
-			return string(out)
+			return string(out), err
 		}
 
-		It("uses the external ServiceAccount name when enabled=false and name is set", func() {
+		renderChart := func(setArgs ...string) string {
+			out, err := runHelmTemplate(setArgs...)
+			Expect(err).NotTo(HaveOccurred(), "helm template failed: %s", out)
+			return out
+		}
+
+		renderChartExpectFailure := func(setArgs ...string) string {
+			out, err := runHelmTemplate(setArgs...)
+			Expect(err).To(HaveOccurred(), "helm template should have failed, got: %s", out)
+			return out
+		}
+
+		// Anchor on the line start so a binding subject ("- kind: ServiceAccount") is not
+		// counted as a created ServiceAccount resource.
+		hasServiceAccountManifest := func(rendered string) bool {
+			return strings.HasPrefix(rendered, "kind: ServiceAccount\n") ||
+				strings.Contains(rendered, "\nkind: ServiceAccount\n")
+		}
+
+		saSubjectNames := func(rendered string) []string {
+			re := regexp.MustCompile(`- kind: ServiceAccount\s+name:\s+(\S+)`)
+			var names []string
+			for _, m := range re.FindAllStringSubmatch(rendered, -1) {
+				names = append(names, m[1])
+			}
+			return names
+		}
+
+		// Match "kind:" at the line start so a query for RoleBinding never matches ClusterRoleBinding.
+		countKind := func(rendered, kind string) int {
+			return strings.Count(rendered, "\nkind: "+kind+"\n")
+		}
+
+		DescribeTable("resolves serviceAccountName across every enabled/name combination",
+			func(setArgs []string, wantName string, wantManifest bool) {
+				rendered := renderChart(setArgs...)
+
+				By("the Deployment references the expected ServiceAccount")
+				Expect(rendered).To(ContainSubstring("serviceAccountName: " + wantName))
+
+				By("every RBAC binding subject resolves to that same ServiceAccount")
+				subjects := saSubjectNames(rendered)
+				Expect(subjects).NotTo(BeEmpty())
+				Expect(subjects).To(HaveEach(wantName))
+
+				By("the ServiceAccount manifest is created only when the chart owns the SA")
+				Expect(hasServiceAccountManifest(rendered)).To(Equal(wantManifest))
+			},
+			Entry("defaults (enabled=true, no name): chart creates and uses the generated SA",
+				[]string{}, generatedName, true),
+			Entry("enabled=true with a custom name: name ignored, chart owns the SA",
+				[]string{"--set", "serviceAccount.enabled=true", "--set", "serviceAccount.name=custom-sa"},
+				generatedName, true),
+			Entry("enabled=false with a name: uses the external SA, creates none",
+				[]string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=external-sa"},
+				"external-sa", false),
+			Entry("enabled=false with name=default: opts into the namespace default SA, creates none",
+				[]string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=default"},
+				"default", false),
+			Entry("enabled null with a name: behaves as disabled, uses that name, creates none",
+				[]string{"--set", "serviceAccount.enabled=null", "--set", "serviceAccount.name=external-sa"},
+				"external-sa", false),
+		)
+
+		// Failing at render time prevents silently binding operator RBAC to the shared default SA.
+		DescribeTable("fails to render when enabled=false and no ServiceAccount name is set",
+			func(setArgs []string) {
+				out := renderChartExpectFailure(setArgs...)
+				Expect(out).To(ContainSubstring(
+					"serviceAccount.name is required when serviceAccount.enabled=false"))
+				Expect(out).To(ContainSubstring(
+					"set name: default explicitly to use the namespace default ServiceAccount"))
+			},
+			Entry("name unset", []string{"--set", "serviceAccount.enabled=false"}),
+			Entry("name empty", []string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name="}),
+			Entry("name null", []string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=null"}),
+			Entry("toggle null, no name: behaves as disabled", []string{"--set", "serviceAccount.enabled=null"}),
+		)
+
+		DescribeTable("keeps every binding subject consistent with the Deployment across RBAC scope modes",
+			func(setArgs []string, wantName string) {
+				rendered := renderChart(setArgs...)
+
+				Expect(rendered).To(ContainSubstring("serviceAccountName: " + wantName))
+				subjects := saSubjectNames(rendered)
+				Expect(subjects).NotTo(BeEmpty())
+				Expect(subjects).To(HaveEach(wantName))
+			},
+			Entry("cluster-scoped, default SA", []string{}, generatedName),
+			Entry("namespaced, default SA",
+				[]string{"--set", "rbac.namespaced=true"}, generatedName),
+			Entry("cluster-scoped, external SA",
+				[]string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=external-sa"},
+				"external-sa"),
+			Entry("namespaced, external SA",
+				[]string{
+					"--set", "rbac.namespaced=true",
+					"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=external-sa",
+				},
+				"external-sa"),
+			Entry("cluster-scoped, explicit name=default",
+				[]string{"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=default"}, "default"),
+			Entry("namespaced, explicit name=default",
+				[]string{
+					"--set", "rbac.namespaced=true",
+					"--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=default",
+				},
+				"default"),
+		)
+
+		// Scope rules from helm-v2-alpha.md: manager bindings switch with rbac.namespaced,
+		// leader-election is always a RoleBinding, metrics-auth is always a ClusterRoleBinding.
+		DescribeTable("applies the documented RBAC scope rules for SA-bearing bindings",
+			func(setArgs []string, wantClusterRoleBindings, wantRoleBindings int) {
+				rendered := renderChart(setArgs...)
+
+				By("binding kinds follow the documented cluster/namespaced rules")
+				Expect(countKind(rendered, "ClusterRoleBinding")).To(Equal(wantClusterRoleBindings))
+				Expect(countKind(rendered, "RoleBinding")).To(Equal(wantRoleBindings))
+
+				By("whatever bindings render, their SA subjects stay consistent")
+				Expect(saSubjectNames(rendered)).To(HaveEach(generatedName))
+			},
+			Entry("cluster-scoped, metrics off: manager CRB + leader-election RB",
+				[]string{}, 1, 1),
+			Entry("namespaced, metrics off: manager switches to RB, leader-election RB, no CRB",
+				[]string{"--set", "rbac.namespaced=true"}, 0, 2),
+			Entry("cluster-scoped, metrics on: manager CRB + metrics-auth CRB",
+				[]string{"--set", "metrics.enabled=true", "--set", "metrics.secure=true"}, 2, 1),
+			Entry("namespaced, metrics on: metrics-auth stays CRB, manager+leader-election RB",
+				[]string{"--set", "rbac.namespaced=true", "--set", "metrics.enabled=true", "--set", "metrics.secure=true"},
+				1, 2),
+		)
+
+		It("never leaks the generated name when an external SA is selected", func() {
 			rendered := renderChart("--set", "serviceAccount.enabled=false", "--set", "serviceAccount.name=external-sa")
-
-			By("the Deployment references the external ServiceAccount, not the generated name")
-			Expect(rendered).To(ContainSubstring("serviceAccountName: external-sa"))
-			Expect(rendered).NotTo(ContainSubstring("serviceAccountName: my-release-test-project-controller-manager"))
-
-			By("no ServiceAccount manifest is created since enabled=false")
-			Expect(rendered).NotTo(ContainSubstring("kind: ServiceAccount"))
+			Expect(rendered).NotTo(ContainSubstring("serviceAccountName: " + generatedName))
 		})
 
-		It("falls back to the generated name when serviceAccount config is left at defaults", func() {
-			rendered := renderChart()
-
-			By("the Deployment uses the generated controller-manager name")
-			Expect(rendered).To(ContainSubstring("serviceAccountName: my-release-test-project-controller-manager"))
-
-			By("the default ServiceAccount manifest is created")
-			Expect(rendered).To(ContainSubstring("kind: ServiceAccount"))
-		})
-
-		It("uses the generated name when enabled=true even if serviceAccount.name is set", func() {
+		It("never leaks a stale custom name while the chart manages its own SA", func() {
 			rendered := renderChart("--set", "serviceAccount.enabled=true", "--set", "serviceAccount.name=custom-sa")
-
-			By("the external name is ignored while the chart manages its own ServiceAccount")
-			Expect(rendered).To(ContainSubstring("serviceAccountName: my-release-test-project-controller-manager"))
 			Expect(rendered).NotTo(ContainSubstring("serviceAccountName: custom-sa"))
 		})
 	})
@@ -996,13 +1113,15 @@ spec:
 }
 
 // createKustomizeForServiceAccountRender extends createBasicKustomizeOutput (Namespace +
-// ServiceAccount + Deployment) with the only two pieces the serviceAccountName render tests need:
-//   - a pod-template annotations block, so the chart renders cleanly under `helm template` instead
-//     of nil-pointering on .Values.manager.pod.annotations (the generator emits an unguarded
-//     reference when the source pod template has no annotations); and
-//   - an explicit serviceAccountName on the pod spec, which is what the helper rewrites.
+// ServiceAccount + Deployment) for the serviceAccountName render tests. It adds:
+//   - a pod-template annotations block, otherwise the chart nil-pointers on
+//     .Values.manager.pod.annotations under `helm template`;
+//   - an explicit serviceAccountName on the pod spec, which the helper rewrites;
+//   - the three bindings that carry the manager ServiceAccount as a subject, so tests can check every
+//     subject stays consistent: manager (switches with rbac.namespaced), leader-election (always a
+//     RoleBinding), and metrics-auth (always a ClusterRoleBinding, only when metrics is secure).
 func createKustomizeForServiceAccountRender(projectName string) string {
-	return strings.Replace(
+	withPod := strings.Replace(
 		createBasicKustomizeOutput(projectName),
 		`    metadata:
       labels:
@@ -1019,6 +1138,94 @@ func createKustomizeForServiceAccountRender(projectName string) string {
       containers:`,
 		1,
 	)
+
+	return withPod + `---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-manager-role
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ` + projectName + `-manager-role
+subjects:
+- kind: ServiceAccount
+  name: ` + projectName + `-controller-manager
+  namespace: ` + projectName + `-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-leader-election-role
+  namespace: ` + projectName + `-system
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-leader-election-rolebinding
+  namespace: ` + projectName + `-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ` + projectName + `-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: ` + projectName + `-controller-manager
+  namespace: ` + projectName + `-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-metrics-auth-role
+rules:
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: ` + projectName + `
+  name: ` + projectName + `-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ` + projectName + `-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: ` + projectName + `-controller-manager
+  namespace: ` + projectName + `-system
+`
 }
 
 func setupKustomizeFile(filePath, content string) error {
