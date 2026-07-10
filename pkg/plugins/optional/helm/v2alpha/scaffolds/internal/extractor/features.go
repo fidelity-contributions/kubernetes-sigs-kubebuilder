@@ -41,6 +41,7 @@ type FeatureSet struct {
 	HasClusterScopedRBAC    bool
 	WebhookPort             int
 	MetricsPort             int
+	HealthProbePort         int
 	RoleNamespaces          map[string]string
 }
 
@@ -49,9 +50,10 @@ type FeatureSet struct {
 // The managerNamespace is the namespace where the manager deployment runs.
 func (f *FeaturesExtractor) DetectFeatures(resources *ResourceSet, namePrefix, managerNamespace string) FeatureSet {
 	features := FeatureSet{
-		WebhookPort:    9443,
-		MetricsPort:    8443,
-		RoleNamespaces: make(map[string]string),
+		WebhookPort:     9443,
+		MetricsPort:     8443,
+		HealthProbePort: 8081,
+		RoleNamespaces:  make(map[string]string),
 	}
 
 	features.HasCRDs = len(resources.CustomResourceDefinitions) > 0
@@ -102,6 +104,13 @@ func (f *FeaturesExtractor) DetectFeatures(resources *ResourceSet, namePrefix, m
 					break
 				}
 			}
+		}
+	}
+
+	// The health probe port is defined on the manager container's --health-probe-bind-address arg.
+	if resources.Deployment != nil {
+		if port := extractHealthProbePortFromDeployment(resources.Deployment); port > 0 {
+			features.HealthProbePort = port
 		}
 	}
 
@@ -192,6 +201,43 @@ func extractWebhookPortFromDeployment(deployment *unstructured.Unstructured) int
 		if isWebhookPortName(name) {
 			if cp, ok := toInt(portMap["containerPort"]); ok {
 				return cp
+			}
+		}
+	}
+
+	return 0
+}
+
+// extractHealthProbePortFromDeployment extracts the health probe port from the
+// manager container's --health-probe-bind-address argument.
+func extractHealthProbePortFromDeployment(deployment *unstructured.Unstructured) int {
+	specMap := extractDeploymentSpec(deployment)
+	if specMap == nil {
+		return 0
+	}
+	container := findManagerContainer(deployment, specMap)
+	if container == nil {
+		return 0
+	}
+
+	argsField, found, err := unstructured.NestedFieldNoCopy(container, "args")
+	if !found || err != nil {
+		return 0
+	}
+
+	argsList, ok := argsField.([]any)
+	if !ok {
+		return 0
+	}
+
+	for _, a := range argsList {
+		strArg, ok := a.(string)
+		if !ok {
+			continue
+		}
+		if strings.Contains(strArg, "--health-probe-bind-address") {
+			if port := ExtractPortFromArg(strArg); port > 0 {
+				return port
 			}
 		}
 	}

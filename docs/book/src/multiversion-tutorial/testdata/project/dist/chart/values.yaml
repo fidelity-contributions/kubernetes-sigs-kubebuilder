@@ -159,6 +159,13 @@ metrics:
   # Note: Metrics authn/authz needs ClusterRole access.
   secure: true
 
+## Health probe endpoint.
+## Serves the liveness (/healthz) and readiness (/readyz) checks.
+##
+healthProbe:
+  # Health probe server port
+  port: 8081
+
 ## Cert-manager integration for TLS certificates.
 ## Required for webhook certificates and metrics endpoint certificates.
 ##

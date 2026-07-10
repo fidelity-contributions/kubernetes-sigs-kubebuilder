@@ -81,9 +81,13 @@ func GetControllerPodName(kbc *utils.TestContext) string {
 	return controllerPodName
 }
 
+// defaultMetricsPort is the port the metrics service listens on when values.yaml is not customized.
+const defaultMetricsPort = 8443
+
 // GetMetricsOutput returns the metrics output from curl pod
 // namePrefix is the prefix for service names (e.g., "e2e-{suffix}" or "custom-operator" from fullnameOverride)
-func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestContext) string {
+// metricsPort is the port the metrics service is exposed on; pass 0 to use the default (8443).
+func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestContext, metricsPort int) string {
 	var err error
 	// All Kubebuilder projects are cluster-scoped, so use ClusterRoleBinding
 	_, err = kbc.Kubectl.Command(
@@ -164,7 +168,7 @@ func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestConte
 	}
 
 	By("creating a curl pod to access the metrics endpoint")
-	cmdOpts := cmdOptsToCreateCurlPod(namePrefix, kbc, token)
+	cmdOpts := cmdOptsToCreateCurlPod(namePrefix, kbc, token, metricsPort)
 	_, err = kbc.Kubectl.CommandInNamespace(cmdOpts...)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -215,7 +219,7 @@ func ValidateMetricsUnavailable(namePrefix string, kbc *utils.TestContext) {
 	Expect(token).NotTo(BeEmpty())
 
 	By("creating a curl pod to access the metrics endpoint")
-	cmdOpts := cmdOptsToCreateCurlPod(namePrefix, kbc, token)
+	cmdOpts := cmdOptsToCreateCurlPod(namePrefix, kbc, token, defaultMetricsPort)
 	_, err = kbc.Kubectl.CommandInNamespace(cmdOpts...)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -240,7 +244,10 @@ func ValidateMetricsUnavailable(namePrefix string, kbc *utils.TestContext) {
 	removeCurlPod(kbc)
 }
 
-func cmdOptsToCreateCurlPod(namePrefix string, kbc *utils.TestContext, token string) []string {
+func cmdOptsToCreateCurlPod(namePrefix string, kbc *utils.TestContext, token string, metricsPort int) []string {
+	if metricsPort == 0 {
+		metricsPort = defaultMetricsPort
+	}
 	cmdOpts := []string{
 		"run", "curl",
 		"--restart=Never",
@@ -256,7 +263,7 @@ func cmdOptsToCreateCurlPod(namePrefix string, kbc *utils.TestContext, token str
 					"args": [
 						"for i in $(seq 1 30); do `+
 			`curl -v -k -H 'Authorization: Bearer %s' `+
-			`https://%s-controller-manager-metrics-service.%s.svc.cluster.local:8443/metrics `+
+			`https://%s-controller-manager-metrics-service.%s.svc.cluster.local:%d/metrics `+
 			`&& exit 0 || sleep 2; done; exit 1"
 					],
 					"securityContext": {
@@ -274,7 +281,7 @@ func cmdOptsToCreateCurlPod(namePrefix string, kbc *utils.TestContext, token str
 				}],
 				"serviceAccountName": "%s"
 			}
-    }`, token, namePrefix, kbc.Kubectl.Namespace, kbc.Kubectl.ServiceAccount),
+    }`, token, namePrefix, kbc.Kubectl.Namespace, metricsPort, kbc.Kubectl.ServiceAccount),
 	}
 	return cmdOpts
 }
