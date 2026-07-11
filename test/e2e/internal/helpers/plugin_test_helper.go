@@ -71,6 +71,10 @@ type RunOptions struct {
 	HelmFullnameOverride string
 	// SkipChartGeneration skips build-installer and chart generation (chart already prepared externally)
 	SkipChartGeneration bool
+	// MetricsPort is the port the metrics service is exposed on. Defaults to 8443 when zero.
+	// Set this when the chart's metrics.port has been customized so the metrics are scraped
+	// from the right port.
+	MetricsPort int
 }
 
 // Run executes common e2e tests for a scaffolded project.
@@ -310,7 +314,7 @@ func Run(kbc *utils.TestContext, opts RunOptions) {
 
 	if opts.HasMetrics {
 		By("checking the metrics values to validate that the created resource object gets reconciled")
-		metricsOutput := GetMetricsOutput(controllerPodName, namePrefix, kbc)
+		metricsOutput := GetMetricsOutput(controllerPodName, namePrefix, kbc, opts.MetricsPort)
 		Expect(metricsOutput).To(ContainSubstring(fmt.Sprintf(
 			`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
 			strings.ToLower(kbc.Kind),
@@ -408,7 +412,7 @@ func Run(kbc *utils.TestContext, opts RunOptions) {
 
 		if opts.HasMetrics {
 			By("validating conversion metrics to confirm conversion operations")
-			metricsOutput := GetMetricsOutput(controllerPodName, namePrefix, kbc)
+			metricsOutput := GetMetricsOutput(controllerPodName, namePrefix, kbc, opts.MetricsPort)
 			conversionMetric := `controller_runtime_reconcile_total{controller="conversiontest",result="success"} 1`
 			Expect(metricsOutput).To(ContainSubstring(conversionMetric),
 				"Expected metric for successful ConversionTest reconciliation")

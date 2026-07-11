@@ -98,7 +98,32 @@ func TemplatePorts(yamlContent string, resource *unstructured.Unstructured) stri
 		// Replace --webhook-port with templated version (matches any numeric port)
 		yamlContent = regexp.MustCompile(`--webhook-port=([0-9]+)`).
 			ReplaceAllString(yamlContent, "--webhook-port={{ .Values.webhook.port }}")
+
+		yamlContent = templateHealthProbePort(yamlContent)
 	}
+
+	return yamlContent
+}
+
+// templateHealthProbePort templates the manager health probe port so it can be
+// configured from values.yaml, mirroring how metrics and webhook ports are handled.
+// It rewrites the four places the port appears in the manager Deployment: the
+// --health-probe-bind-address arg, the "health" containerPort, and the liveness
+// and readiness httpGet ports.
+func templateHealthProbePort(yamlContent string) string {
+	const healthPortTemplate = "{{ .Values.healthProbe.port }}"
+
+	// --health-probe-bind-address=:PORT (also HOST:PORT and IPv6 [::1]:PORT)
+	yamlContent = regexp.MustCompile(`--health-probe-bind-address=(\[[^\]]*\]|[^\s:]*):([0-9]+)`).
+		ReplaceAllString(yamlContent, "--health-probe-bind-address=$1:"+healthPortTemplate)
+
+	// containerPort for the port named "health"
+	yamlContent = regexp.MustCompile(`(?m)(\s*- )?containerPort:\s*\d+(\s*\n\s*name:\s*health\b)`).
+		ReplaceAllString(yamlContent, "${1}containerPort: "+healthPortTemplate+"${2}")
+
+	// liveness (/healthz) and readiness (/readyz) httpGet ports
+	yamlContent = regexp.MustCompile(`(path:\s*/(?:healthz|readyz)[ \t]*\n\s*port:\s*)\d+`).
+		ReplaceAllString(yamlContent, "${1}"+healthPortTemplate)
 
 	return yamlContent
 }

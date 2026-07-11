@@ -198,7 +198,7 @@ spec:
 			Expect(result).To(ContainSubstring("{{- if not .Values.metrics.secure }}"))
 			Expect(result).To(ContainSubstring("- --metrics-secure=false"))
 			Expect(result).To(ContainSubstring("- --metrics-bind-address=0"))
-			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:8081"))
+			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
 			Expect(result).To(ContainSubstring("{{- range .Values.manager.args }}"))
 			Expect(result).NotTo(ContainSubstring("BUSYBOX_IMAGE"))
 			Expect(result).NotTo(ContainSubstring("MEMCACHED_IMAGE"))
@@ -2414,8 +2414,53 @@ spec:
 
 			result := templater.templatePorts(content, deployment)
 
-			Expect(result).To(ContainSubstring("port: 8081"))
-			Expect(result).NotTo(ContainSubstring("{{ .Values"))
+			Expect(result).To(ContainSubstring("port: {{ .Values.healthProbe.port }}"))
+			Expect(result).NotTo(ContainSubstring("port: 8081"))
+		})
+
+		// Regression test for #5865: the health probe port must be templated in all
+		// four places it appears in the manager Deployment (bind-address arg, the
+		// "health" containerPort, and the liveness and readiness httpGet ports), so it
+		// can be configured from values.yaml like the metrics and webhook ports.
+		It("should template every health probe port reference in the manager Deployment", func() {
+			deployment := &unstructured.Unstructured{}
+			deployment.SetAPIVersion("apps/v1")
+			deployment.SetKind("Deployment")
+			deployment.SetName("test-project-controller-manager")
+
+			content := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-project-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - --health-probe-bind-address=:8081
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081`
+
+			result := templater.templatePorts(content, deployment)
+
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("containerPort: {{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring(`            path: /healthz
+            port: {{ .Values.healthProbe.port }}`))
+			Expect(result).To(ContainSubstring(`            path: /readyz
+            port: {{ .Values.healthProbe.port }}`))
+			Expect(result).NotTo(ContainSubstring("8081"))
 		})
 
 		It("should template port-related args in Deployment", func() {
@@ -2442,7 +2487,7 @@ spec:
 
 			Expect(result).To(ContainSubstring("--metrics-bind-address=:{{ .Values.metrics.port }}"))
 			Expect(result).NotTo(ContainSubstring("--metrics-bind-address=:8443"))
-			Expect(result).To(ContainSubstring("--health-probe-bind-address=:8081"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
 			Expect(result).To(ContainSubstring("--leader-elect"))
 		})
 
@@ -2470,6 +2515,7 @@ spec:
           name: webhook-server
         livenessProbe:
           httpGet:
+            path: /healthz
             port: 9091`
 
 			result := templater.templatePorts(content, deployment)
@@ -2477,8 +2523,9 @@ spec:
 			Expect(result).To(ContainSubstring("--metrics-bind-address=:{{ .Values.metrics.port }}"))
 			Expect(result).To(ContainSubstring("--webhook-port={{ .Values.webhook.port }}"))
 			Expect(result).To(ContainSubstring("containerPort: {{ .Values.webhook.port }}"))
-			Expect(result).To(ContainSubstring("--health-probe-bind-address=:9091"))
-			Expect(result).To(ContainSubstring("port: 9091"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("port: {{ .Values.healthProbe.port }}"))
+			Expect(result).NotTo(ContainSubstring(":9091"))
 		})
 
 		It("should not template non-webhook/metrics resources", func() {
