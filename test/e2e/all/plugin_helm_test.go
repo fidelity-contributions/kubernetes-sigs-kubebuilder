@@ -196,8 +196,8 @@ var _ = Describe("kubebuilder", func() {
 			By("deploying with the customized ports and validating the manager runs correctly")
 			// helpers.Run drives the full runtime verification against the customized chart:
 			// the pod only reaches Ready if the health probe answers on customHealthProbePort,
-			// the webhook flow works through customWebhookPort, and the metrics are scraped
-			// from customMetricsPort.
+			// the defaulting, validating, and conversion webhook flows work through
+			// customWebhookPort, and the metrics are scraped from customMetricsPort.
 			helpers.Run(kbc, helpers.RunOptions{
 				HasWebhook:          true,
 				HasMetrics:          true,
