@@ -17,6 +17,8 @@ limitations under the License.
 package all
 
 import (
+	"path/filepath"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -99,6 +101,34 @@ var _ = Describe("kubebuilder", func() {
 				HasNetworkPolicies: true,
 				InstallMethod:      helpers.InstallMethodKustomize,
 			})
+		})
+
+		It("should generate a runnable project with a custom webhook port protected by network policies", func() {
+			helpers.GenerateV4WithNetworkPolicies(kbc)
+
+			By("configuring the manager and webhook Service to use a custom webhook port")
+			const customWebhookPort = "9444"
+			Expect(util.ReplaceInFile(
+				filepath.Join(kbc.Dir, "config", "default", "manager_webhook_patch.yaml"),
+				"9443", customWebhookPort)).To(Succeed())
+			Expect(util.ReplaceInFile(
+				filepath.Join(kbc.Dir, "config", "webhook", "service.yaml"),
+				"targetPort: 9443", "targetPort: "+customWebhookPort)).To(Succeed())
+
+			By("deploying with the custom webhook port and validating all webhook flows")
+			helpers.Run(kbc, helpers.RunOptions{
+				HasWebhook:         true,
+				HasMetrics:         true,
+				HasNetworkPolicies: true,
+				InstallMethod:      helpers.InstallMethodKustomize,
+			})
+
+			By("verifying the manager is configured with the custom webhook port")
+			controllerPodName := helpers.GetControllerPodName(kbc)
+			args, err := kbc.Kubectl.Get(true,
+				"pod", controllerPodName, "-o", "jsonpath={.spec.containers[0].args}")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(args).To(ContainSubstring("--webhook-port=" + customWebhookPort))
 		})
 
 		It("should generate a runnable project with the manager running "+
