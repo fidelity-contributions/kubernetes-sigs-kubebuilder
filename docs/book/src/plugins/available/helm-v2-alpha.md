@@ -235,6 +235,16 @@ The `metrics-auth-role` and `metrics-reader` are always ClusterRoles, even when 
 
 </aside>
 
+### Webhook port configuration
+
+Set `webhook.port` to change the port used by the manager webhook server. The chart applies the same value to the manager argument, container port, webhook service, and webhook NetworkPolicy.
+
+For example, install the chart with the webhook server on port `9444`:
+
+```bash
+helm install my-operator ./dist/chart --set webhook.port=9444
+```
+
 ### NetworkPolicy configuration
 
 Set `networkPolicy.enabled: true` to install NetworkPolicy resources for the manager pod.

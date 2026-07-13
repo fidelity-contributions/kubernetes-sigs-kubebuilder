@@ -163,6 +163,7 @@ spec:
       - args:
         - --metrics-bind-address=:8443
         - --health-probe-bind-address=:8081
+        - --webhook-port=9443
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs/tls.crt
         - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs/tls.crt
         - --leader-elect
@@ -199,6 +200,7 @@ spec:
 			Expect(result).To(ContainSubstring("- --metrics-secure=false"))
 			Expect(result).To(ContainSubstring("- --metrics-bind-address=0"))
 			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("- --webhook-port={{ .Values.webhook.port }}"))
 			Expect(result).To(ContainSubstring("{{- range .Values.manager.args }}"))
 			Expect(result).NotTo(ContainSubstring("BUSYBOX_IMAGE"))
 			Expect(result).NotTo(ContainSubstring("MEMCACHED_IMAGE"))
