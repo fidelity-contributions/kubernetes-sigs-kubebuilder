@@ -127,6 +127,7 @@ func (f *WebhookUpdater) SetTemplateDefaults() error {
 
 	// Append new webhook code at the end of the file
 	if newCode.Len() > 0 {
+		fileContent = f.addContextImport(fileContent)
 		fileContent = strings.TrimRight(fileContent, "\n") + "\n" + newCode.String()
 	}
 
@@ -240,6 +241,24 @@ func (f *WebhookUpdater) addAdmissionImport(content string) string {
 	log.Warn("Could not add admission import",
 		"kind", f.Resource.Kind,
 		"suggestion", "Manually add: "+admissionImport)
+	return content
+}
+
+// addContextImport adds the context package import required by admission webhooks.
+func (f *WebhookUpdater) addContextImport(content string) string {
+	const contextImport = `"context"`
+	if strings.Contains(content, contextImport) {
+		return content
+	}
+
+	importBlockPattern := regexp.MustCompile(`(?s)(import\s*\()`)
+	if match := importBlockPattern.FindStringSubmatch(content); len(match) > 1 {
+		return strings.Replace(content, match[1], match[1]+"\n\t"+contextImport, 1)
+	}
+
+	log.Warn("Could not add context import",
+		"kind", f.Resource.Kind,
+		"suggestion", "Manually add: context")
 	return content
 }
 
