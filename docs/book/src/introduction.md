@@ -20,7 +20,7 @@ Including:
 - Self-healing
 - Garbage Collection and Finalizers
 - Declarative vs Imperative APIs
-- Level-Based vs Edge-Base APIs
+- Level-Based vs Edge-Based APIs
 - Resources vs Subresources
 
 #### Kubernetes API extension developers
