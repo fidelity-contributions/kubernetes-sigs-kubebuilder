@@ -184,7 +184,7 @@ var _ = Describe("kubebuilder", func() {
 				customWebhookPort     = 9444
 			)
 
-			By("overriding metrics.port, healthProbe.port, and webhook.port in values.yaml")
+			By("overriding ports and enabling network policies in values.yaml")
 			valuesPath := filepath.Join(kbc.Dir, "dist", "chart", "values.yaml")
 			Expect(pluginutil.ReplaceInFile(valuesPath,
 				"port: 8443", fmt.Sprintf("port: %d", customMetricsPort))).To(Succeed())
@@ -192,6 +192,8 @@ var _ = Describe("kubebuilder", func() {
 				"port: 8081", fmt.Sprintf("port: %d", customHealthProbePort))).To(Succeed())
 			Expect(pluginutil.ReplaceInFile(valuesPath,
 				"port: 9443", fmt.Sprintf("port: %d", customWebhookPort))).To(Succeed())
+			Expect(pluginutil.ReplaceInFile(valuesPath,
+				"networkPolicy:\n  enabled: false", "networkPolicy:\n  enabled: true")).To(Succeed())
 
 			By("deploying with the customized ports and validating the manager runs correctly")
 			// helpers.Run drives the full runtime verification against the customized chart:
