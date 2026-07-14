@@ -168,7 +168,7 @@ var _ = Describe("kubebuilder", func() {
 			})
 		})
 
-		It("should install the HelmChart with custom metrics and health probe ports", func() {
+		It("should install the HelmChart with custom metrics, health probe, and webhook ports", func() {
 			By("generating a full-featured project with webhooks, metrics and conversion webhooks")
 			helpers.GenerateV4(kbc)
 
@@ -176,38 +176,40 @@ var _ = Describe("kubebuilder", func() {
 			Expect(kbc.Make("build-installer")).To(Succeed())
 			Expect(kbc.EditHelmPlugin()).To(Succeed())
 
-			// metrics.port and healthProbe.port are wired into the manager through the
-			// --metrics-bind-address and --health-probe-bind-address flags, so overriding
-			// them in values.yaml changes the port the manager actually binds to. webhook.port
-			// is intentionally left at its default here: the scaffolded manager serves the
-			// webhook on controller-runtime's default port, so that value only affects the
-			// Service/containerPort and is exercised by the other webhook specs.
+			// Each port value is wired into the manager, so overriding it in values.yaml
+			// changes both the manager listener and the Kubernetes resources that target it.
 			const (
 				customMetricsPort     = 8444
 				customHealthProbePort = 8082
+				customWebhookPort     = 9444
 			)
 
-			By("overriding metrics.port and healthProbe.port in values.yaml")
+			By("overriding ports and enabling network policies in values.yaml")
 			valuesPath := filepath.Join(kbc.Dir, "dist", "chart", "values.yaml")
 			Expect(pluginutil.ReplaceInFile(valuesPath,
 				"port: 8443", fmt.Sprintf("port: %d", customMetricsPort))).To(Succeed())
 			Expect(pluginutil.ReplaceInFile(valuesPath,
 				"port: 8081", fmt.Sprintf("port: %d", customHealthProbePort))).To(Succeed())
+			Expect(pluginutil.ReplaceInFile(valuesPath,
+				"port: 9443", fmt.Sprintf("port: %d", customWebhookPort))).To(Succeed())
+			Expect(pluginutil.ReplaceInFile(valuesPath,
+				"networkPolicy:\n  enabled: false", "networkPolicy:\n  enabled: true")).To(Succeed())
 
 			By("deploying with the customized ports and validating the manager runs correctly")
 			// helpers.Run drives the full runtime verification against the customized chart:
 			// the pod only reaches Ready if the health probe answers on customHealthProbePort,
-			// the webhook flow keeps working, and the metrics are scraped from customMetricsPort.
+			// the defaulting, validating, and conversion webhook flows work through
+			// customWebhookPort, and the metrics are scraped from customMetricsPort.
 			helpers.Run(kbc, helpers.RunOptions{
 				HasWebhook:          true,
 				HasMetrics:          true,
-				HasNetworkPolicies:  false,
+				HasNetworkPolicies:  true,
 				InstallMethod:       helpers.InstallMethodHelm,
 				MetricsPort:         customMetricsPort,
 				SkipChartGeneration: true, // Chart already generated and customized above
 			})
 
-			By("verifying the manager binds the probes and metrics to the custom ports")
+			By("verifying the manager binds probes, metrics, and webhooks to the custom ports")
 			controllerPodName := helpers.GetControllerPodName(kbc)
 			args, err := kbc.Kubectl.Get(true,
 				"pod", controllerPodName, "-o", "jsonpath={.spec.containers[0].args}")
@@ -216,12 +218,14 @@ var _ = Describe("kubebuilder", func() {
 				fmt.Sprintf("--health-probe-bind-address=:%d", customHealthProbePort)))
 			Expect(args).To(ContainSubstring(
 				fmt.Sprintf("--metrics-bind-address=:%d", customMetricsPort)))
+			Expect(args).To(ContainSubstring(fmt.Sprintf("--webhook-port=%d", customWebhookPort)))
 
 			By("verifying the container declares the custom health probe port")
 			ports, err := kbc.Kubectl.Get(true,
 				"pod", controllerPodName, "-o", "jsonpath={.spec.containers[0].ports}")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ports).To(ContainSubstring(strconv.Itoa(customHealthProbePort)))
+			Expect(ports).To(ContainSubstring(strconv.Itoa(customWebhookPort)))
 		})
 
 		It("should generate a namespeced runnable project using webhooks and installed with the HelmChart", func() {

@@ -442,6 +442,9 @@ func extractContainerArgs(container map[string]any, config map[string]any) {
 		if strings.Contains(strArg, "--health-probe-bind-address") {
 			continue
 		}
+		if strings.Contains(strArg, "--webhook-port") {
+			continue
+		}
 		if strings.Contains(strArg, "--webhook-cert-path") ||
 			strings.Contains(strArg, "--metrics-cert-path") {
 			continue

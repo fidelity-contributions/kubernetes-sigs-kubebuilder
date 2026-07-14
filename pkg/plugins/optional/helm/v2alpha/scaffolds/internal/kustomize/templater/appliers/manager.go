@@ -624,6 +624,7 @@ func templateControllerManagerArgs(yamlContent string) string {
 		metricsLine    string
 		metricsIndent  string
 		healthLine     string
+		webhookLine    string
 		preservedLines []string
 	)
 
@@ -648,6 +649,8 @@ func templateControllerManagerArgs(yamlContent string) string {
 			}
 		case strings.Contains(trimmed, "--health-probe-bind-address"):
 			healthLine = line
+		case strings.Contains(trimmed, "--webhook-port"):
+			webhookLine = line
 		case strings.Contains(trimmed, "--webhook-cert-path"),
 			strings.Contains(trimmed, "--metrics-cert-path"):
 			preservedLines = append(preservedLines, line)
@@ -685,6 +688,10 @@ func templateControllerManagerArgs(yamlContent string) string {
 	}
 	if healthLine != "" {
 		builder.WriteString(healthLine)
+		builder.WriteString("\n")
+	}
+	if webhookLine != "" {
+		builder.WriteString(webhookLine)
 		builder.WriteString("\n")
 	}
 

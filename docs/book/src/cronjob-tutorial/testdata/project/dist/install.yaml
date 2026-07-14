@@ -4359,6 +4359,7 @@ spec:
         - --health-probe-bind-address=:8081
         - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
         - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        - --webhook-port=9443
         command:
         - /manager
         image: controller:latest
