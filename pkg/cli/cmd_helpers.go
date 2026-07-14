@@ -491,8 +491,9 @@ func (factory *executionHooksFactory) preRunEFunc(
 		// Create the resource if non-nil options provided
 		var res *resource.Resource
 		if options != nil {
-			// TODO: offer a flag instead of hard-coding project-wide domain
+			// TODO: offer a --domain flag so a fresh resource can set it directly.
 			options.Domain = cfg.GetDomain()
+			options.Domain = options.resolveDomain(cfg)
 			if err := options.validate(); err != nil {
 				return fmt.Errorf("%s: failed to create resource: %w", factory.errorMessage, err)
 			}

@@ -194,6 +194,33 @@ var _ = Describe("createAPISubcommand", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should find existing external resource when stored Domain differs from project domain", func() {
+		const externalPath = "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+		const externalDomain = "cert-manager.io"
+
+		// Simulate: resource originally scaffolded with --external-api-domain=cert-manager.io,
+		// so PROJECT stores Domain="cert-manager.io". A fresh CLI invocation without
+		// --external-api-domain runs resolveDomain up in cmd_helpers before the GVK reaches
+		// InjectResource, so by this point res.Domain has already been reconciled to the
+		// stored external domain — mirror that here.
+		existingExternal := *res
+		existingExternal.External = true
+		existingExternal.Path = externalPath
+		existingExternal.Domain = externalDomain
+		Expect(cfg.AddResource(existingExternal)).To(Succeed())
+
+		subCmd.options.DoAPI = false
+		subCmd.options.DoController = true
+		subCmd.options.ExternalAPIPath = ""
+		res.Domain = externalDomain
+
+		err := subCmd.InjectResource(res)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(res.External).To(BeTrue())
+		Expect(res.Path).To(Equal(externalPath))
+	})
+
 	It("should return an actionable error for --resource=false on old project with relative external path", func() {
 		// Simulate an old PROJECT file that stored a relative path instead of a Go import path
 		existingExternal := *res
