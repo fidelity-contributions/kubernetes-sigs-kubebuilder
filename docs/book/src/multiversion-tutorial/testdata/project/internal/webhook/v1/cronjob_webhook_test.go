@@ -28,8 +28,8 @@ var _ = Describe("CronJob Webhook", func() {
 	var (
 		obj       *batchv1.CronJob
 		oldObj    *batchv1.CronJob
-		validator CronJobCustomValidator
-		defaulter CronJobCustomDefaulter
+		validator CronJobValidator
+		defaulter CronJobDefaulter
 	)
 
 	const validCronJobName = "valid-cronjob-name"
@@ -58,8 +58,8 @@ var _ = Describe("CronJob Webhook", func() {
 		*oldObj.Spec.SuccessfulJobsHistoryLimit = 3
 		*oldObj.Spec.FailedJobsHistoryLimit = 1
 
-		validator = CronJobCustomValidator{}
-		defaulter = CronJobCustomDefaulter{
+		validator = CronJobValidator{}
+		defaulter = CronJobDefaulter{
 			DefaultConcurrencyPolicy:          batchv1.AllowConcurrent,
 			DefaultSuspend:                    false,
 			DefaultSuccessfulJobsHistoryLimit: 3,
