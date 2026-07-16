@@ -92,10 +92,10 @@ var _ = Describe("{{ .Resource.Kind }} Webhook", func() {
 		obj *{{ .Resource.ImportAlias }}.{{ .Resource.Kind }}
 		oldObj *{{ .Resource.ImportAlias }}.{{ .Resource.Kind }}
 		{{- if .Resource.HasValidationWebhook }}
-		validator {{ .Resource.Kind }}CustomValidator
+		validator {{ .Resource.Kind }}Validator
 		{{- end }}
 		{{- if .Resource.HasDefaultingWebhook }}
-		defaulter {{ .Resource.Kind }}CustomDefaulter
+		defaulter {{ .Resource.Kind }}Defaulter
 		{{- end }}
 	)
 
@@ -103,11 +103,11 @@ var _ = Describe("{{ .Resource.Kind }} Webhook", func() {
 		obj = &{{ .Resource.ImportAlias }}.{{ .Resource.Kind }}{}
 		oldObj = &{{ .Resource.ImportAlias }}.{{ .Resource.Kind }}{}
 		{{- if .Resource.HasValidationWebhook }}
-		validator = {{ .Resource.Kind }}CustomValidator{}
+		validator = {{ .Resource.Kind }}Validator{}
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
 		{{- end }}
 		{{- if .Resource.HasDefaultingWebhook }}
-		defaulter = {{ .Resource.Kind }}CustomDefaulter{}
+		defaulter = {{ .Resource.Kind }}Defaulter{}
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		{{- end }}
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")

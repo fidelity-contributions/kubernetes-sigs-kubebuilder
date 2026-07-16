@@ -478,8 +478,8 @@ Then, we set up the webhook with the manager.
 
 	err = pluginutil.ReplaceInFile(
 		filepath.Join(sp.ctx.Dir, "internal/webhook/v1/cronjob_webhook.go"),
-		`WithDefaulter(&CronJobCustomDefaulter{}).`,
-		`WithDefaulter(&CronJobCustomDefaulter{
+		`WithDefaulter(&CronJobDefaulter{}).`,
+		`WithDefaulter(&CronJobDefaulter{
         DefaultConcurrencyPolicy:      batchv1.AllowConcurrent,
         DefaultSuspend:                false,
         DefaultSuccessfulJobsHistoryLimit: 3,
@@ -513,7 +513,7 @@ Then, we set up the webhook with the manager.
 
 	err = pluginutil.ReplaceInFile(
 		filepath.Join(sp.ctx.Dir, "internal/webhook/v1/cronjob_webhook.go"),
-		`// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind CronJob.`,
+		`// Default implements admission.Defaulter so a webhook will be registered for the Kind CronJob.`,
 		customInterfaceDefaultInfo)
 	hackutils.CheckError("fixing cronjob_webhook.go by adding validation logic upon object update", err)
 
