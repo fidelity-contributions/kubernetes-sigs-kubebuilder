@@ -200,7 +200,9 @@ spec:
 			Expect(result).To(ContainSubstring("- --metrics-secure=false"))
 			Expect(result).To(ContainSubstring("- --metrics-bind-address=0"))
 			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
-			Expect(result).To(ContainSubstring("- --webhook-port={{ .Values.webhook.port }}"))
+			Expect(result).To(ContainSubstring(`{{- if .Values.webhook.enabled }}
+        - --webhook-port={{ .Values.webhook.port }}
+        {{- end }}`))
 			Expect(result).To(ContainSubstring("{{- range .Values.manager.args }}"))
 			Expect(result).NotTo(ContainSubstring("BUSYBOX_IMAGE"))
 			Expect(result).NotTo(ContainSubstring("MEMCACHED_IMAGE"))

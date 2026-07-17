@@ -84,7 +84,9 @@ spec:
         - --metrics-bind-address=0
         {{- end }}
         - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
+        {{- if .Values.webhook.enabled }}
         - --webhook-port={{ .Values.webhook.port }}
+        {{- end }}
         {{- range .Values.manager.args }}
         - {{ . }}
         {{- end }}
