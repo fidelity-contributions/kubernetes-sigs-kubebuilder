@@ -691,8 +691,12 @@ func templateControllerManagerArgs(yamlContent string) string {
 		builder.WriteString("\n")
 	}
 	if webhookLine != "" {
+		builder.WriteString(itemIndent)
+		builder.WriteString("{{- if .Values.webhook.enabled }}\n")
 		builder.WriteString(webhookLine)
 		builder.WriteString("\n")
+		builder.WriteString(itemIndent)
+		builder.WriteString("{{- end }}\n")
 	}
 
 	builder.WriteString(itemIndent)
