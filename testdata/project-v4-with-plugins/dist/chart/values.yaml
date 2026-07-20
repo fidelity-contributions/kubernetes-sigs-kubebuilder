@@ -27,6 +27,13 @@ manager:
   args:
     - --leader-elect
 
+  ## Health probes.
+  ## The manager serves the liveness (/healthz) and readiness (/readyz) endpoints on this port.
+  ##
+  healthProbe:
+    # Health probe server port
+    port: 8081
+
   ## Environment variables
   ##
   env:
@@ -175,13 +182,6 @@ metrics:
   # Enable secure metrics: HTTPS with certs/auth (true) or HTTP (false).
   # Note: Metrics authn/authz needs ClusterRole access.
   secure: true
-
-## Health probe endpoint.
-## Serves the liveness (/healthz) and readiness (/readyz) checks.
-##
-healthProbe:
-  # Health probe server port
-  port: 8081
 
 ## Cert-manager integration for TLS certificates.
 ## Required for webhook certificates and metrics endpoint certificates.

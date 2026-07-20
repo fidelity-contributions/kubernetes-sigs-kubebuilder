@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,13 +82,31 @@ func GetControllerPodName(kbc *utils.TestContext) string {
 	return controllerPodName
 }
 
-// defaultMetricsPort is the port the metrics service listens on when values.yaml is not customized.
+// defaultMetricsPort is the scaffolded metrics port, used by ValidateMetricsUnavailable
+// where no metrics service exists to read the port from.
 const defaultMetricsPort = 8443
+
+// GetMetricsServicePort returns the port exposed by the controller-manager metrics Service.
+// namePrefix is the prefix for service names (e.g., "e2e-{suffix}" or "custom-operator" from fullnameOverride)
+func GetMetricsServicePort(namePrefix string, kbc *utils.TestContext) int {
+	metricsServiceName := fmt.Sprintf("%s-controller-manager-metrics-service", namePrefix)
+	portOutput, err := kbc.Kubectl.Get(
+		true,
+		"service", metricsServiceName,
+		"-o", "jsonpath={.spec.ports[*].port}",
+	)
+	Expect(err).NotTo(HaveOccurred(), "Controller-manager service should exist")
+	ports := strings.Fields(portOutput)
+	Expect(ports).To(HaveLen(1), "Metrics service should expose exactly one port, got: %q", portOutput)
+	port, err := strconv.Atoi(ports[0])
+	Expect(err).NotTo(HaveOccurred(), "Metrics service port should be numeric")
+	return port
+}
 
 // GetMetricsOutput returns the metrics output from curl pod
 // namePrefix is the prefix for service names (e.g., "e2e-{suffix}" or "custom-operator" from fullnameOverride)
-// metricsPort is the port the metrics service is exposed on; pass 0 to use the default (8443).
-func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestContext, metricsPort int) string {
+// The scrape port is read from the deployed metrics Service, so customized ports are honored automatically.
+func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestContext) string {
 	var err error
 	// All Kubebuilder projects are cluster-scoped, so use ClusterRoleBinding
 	_, err = kbc.Kubectl.Command(
@@ -109,15 +128,12 @@ func GetMetricsOutput(controllerPodName, namePrefix string, kbc *utils.TestConte
 	Expect(token).NotTo(BeEmpty())
 
 	var metricsOutput string
-	By("validating that the controller-manager service is available")
-	_, err = kbc.Kubectl.Get(
-		true,
-		"service", fmt.Sprintf("%s-controller-manager-metrics-service", namePrefix),
-	)
-	Expect(err).NotTo(HaveOccurred(), "Controller-manager service should exist")
+	metricsServiceName := fmt.Sprintf("%s-controller-manager-metrics-service", namePrefix)
+
+	By("reading the metrics port from the controller-manager service")
+	metricsPort := GetMetricsServicePort(namePrefix, kbc)
 
 	By("ensuring the service endpoint is ready")
-	metricsServiceName := fmt.Sprintf("%s-controller-manager-metrics-service", namePrefix)
 	checkServiceEndpoint := func(g Gomega) {
 		var output string
 		output, err = kbc.Kubectl.Command(
@@ -245,9 +261,6 @@ func ValidateMetricsUnavailable(namePrefix string, kbc *utils.TestContext) {
 }
 
 func cmdOptsToCreateCurlPod(namePrefix string, kbc *utils.TestContext, token string, metricsPort int) []string {
-	if metricsPort == 0 {
-		metricsPort = defaultMetricsPort
-	}
 	cmdOpts := []string{
 		"run", "curl",
 		"--restart=Never",

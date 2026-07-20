@@ -199,7 +199,7 @@ spec:
 			Expect(result).To(ContainSubstring("{{- if not .Values.metrics.secure }}"))
 			Expect(result).To(ContainSubstring("- --metrics-secure=false"))
 			Expect(result).To(ContainSubstring("- --metrics-bind-address=0"))
-			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("- --health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}"))
 			Expect(result).To(ContainSubstring(`{{- if .Values.webhook.enabled }}
         - --webhook-port={{ .Values.webhook.port }}
         {{- end }}`))
@@ -2442,7 +2442,7 @@ spec:
 
 			result := templater.templatePorts(content, deployment)
 
-			Expect(result).To(ContainSubstring("port: {{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("port: {{ .Values.manager.healthProbe.port }}"))
 			Expect(result).NotTo(ContainSubstring("port: 8081"))
 		})
 
@@ -2482,13 +2482,103 @@ spec:
 
 			result := templater.templatePorts(content, deployment)
 
-			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
-			Expect(result).To(ContainSubstring("containerPort: {{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("containerPort: {{ .Values.manager.healthProbe.port }}"))
 			Expect(result).To(ContainSubstring(`            path: /healthz
-            port: {{ .Values.healthProbe.port }}`))
+            port: {{ .Values.manager.healthProbe.port }}`))
 			Expect(result).To(ContainSubstring(`            path: /readyz
-            port: {{ .Values.healthProbe.port }}`))
+            port: {{ .Values.manager.healthProbe.port }}`))
 			Expect(result).NotTo(ContainSubstring("8081"))
+		})
+
+		It("should leave probes using the named health port untouched", func() {
+			deployment := &unstructured.Unstructured{}
+			deployment.SetAPIVersion("apps/v1")
+			deployment.SetKind("Deployment")
+			deployment.SetName("test-project-controller-manager")
+
+			content := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-project-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - --health-probe-bind-address=:8081
+        ports:
+        - containerPort: 8081
+          name: health
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health`
+
+			result := templater.templatePorts(content, deployment)
+
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("containerPort: {{ .Values.manager.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring(`            path: /healthz
+            port: health`))
+			Expect(result).To(ContainSubstring(`            path: /readyz
+            port: health`))
+		})
+
+		It("should preserve the host when templating bind-address args in HOST:PORT form", func() {
+			deployment := &unstructured.Unstructured{}
+			deployment.SetAPIVersion("apps/v1")
+			deployment.SetKind("Deployment")
+			deployment.SetName("test-project-controller-manager")
+
+			content := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-project-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - --metrics-bind-address=localhost:8443
+        - --health-probe-bind-address=localhost:8081`
+
+			result := templater.templatePorts(content, deployment)
+
+			Expect(result).To(ContainSubstring("--metrics-bind-address=localhost:{{ .Values.metrics.port }}"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=localhost:{{ .Values.manager.healthProbe.port }}"))
+		})
+
+		It("should preserve the host when templating bind-address args in IPv6 form", func() {
+			deployment := &unstructured.Unstructured{}
+			deployment.SetAPIVersion("apps/v1")
+			deployment.SetKind("Deployment")
+			deployment.SetName("test-project-controller-manager")
+
+			content := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-project-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - --metrics-bind-address=[::1]:8443
+        - --health-probe-bind-address=[::1]:8081`
+
+			result := templater.templatePorts(content, deployment)
+
+			Expect(result).To(ContainSubstring("--metrics-bind-address=[::1]:{{ .Values.metrics.port }}"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=[::1]:{{ .Values.manager.healthProbe.port }}"))
 		})
 
 		It("should template port-related args in Deployment", func() {
@@ -2515,7 +2605,7 @@ spec:
 
 			Expect(result).To(ContainSubstring("--metrics-bind-address=:{{ .Values.metrics.port }}"))
 			Expect(result).NotTo(ContainSubstring("--metrics-bind-address=:8443"))
-			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}"))
 			Expect(result).To(ContainSubstring("--leader-elect"))
 		})
 
@@ -2551,8 +2641,8 @@ spec:
 			Expect(result).To(ContainSubstring("--metrics-bind-address=:{{ .Values.metrics.port }}"))
 			Expect(result).To(ContainSubstring("--webhook-port={{ .Values.webhook.port }}"))
 			Expect(result).To(ContainSubstring("containerPort: {{ .Values.webhook.port }}"))
-			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.healthProbe.port }}"))
-			Expect(result).To(ContainSubstring("port: {{ .Values.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("--health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}"))
+			Expect(result).To(ContainSubstring("port: {{ .Values.manager.healthProbe.port }}"))
 			Expect(result).NotTo(ContainSubstring(":9091"))
 		})
 
