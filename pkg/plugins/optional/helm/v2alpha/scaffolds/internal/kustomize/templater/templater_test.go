@@ -216,6 +216,30 @@ spec:
 			Expect(result).NotTo(ContainSubstring("controller:latest"))
 		})
 
+		It("should not template a webhook port when the project has no webhook", func() {
+			deploymentResource := &unstructured.Unstructured{}
+			deploymentResource.SetAPIVersion("apps/v1")
+			deploymentResource.SetKind("Deployment")
+			deploymentResource.SetName("test-project-controller-manager")
+
+			content := `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - --metrics-bind-address=:8443
+        - --health-probe-bind-address=:8081
+        - --leader-elect
+        name: manager`
+
+			result := templater.ApplyHelmSubstitutions(content, deploymentResource)
+
+			Expect(result).NotTo(ContainSubstring("--webhook-port"))
+			Expect(result).NotTo(ContainSubstring("{{- if .Values.webhook.enabled }}"))
+		})
+
 		It("should handle volume mounts with proper indentation", func() {
 			deploymentResource := &unstructured.Unstructured{}
 			deploymentResource.SetAPIVersion("apps/v1")
