@@ -482,7 +482,7 @@ var _ = Describe("Webhook Incremental Scaffolding", func() {
 				"--group", "test",
 				"--version", "v2",
 				"--kind", "TestMultiversion",
-				"--resource=false", "--controller=false",
+				"--resource", "--controller=false",
 				"--make=false",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -527,6 +527,16 @@ var _ = Describe("Webhook Incremental Scaffolding", func() {
 			Expect(string(content)).To(ContainSubstring("Context(\"When creating TestMultiversion under Conversion Webhook\""))
 			Expect(string(content)).To(ContainSubstring("Context(\"When creating TestMultiversion under Defaulting Webhook\""))
 			Expect(string(content)).To(ContainSubstring("Context(\"When creating or updating TestMultiversion under Validating Webhook\""))
+
+			By("verifying the webhook implementation imports context")
+			webhookFile := filepath.Join(kbc.Dir, "internal/webhook/v1/testmultiversion_webhook.go")
+			content, err = os.ReadFile(webhookFile)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(content)).To(ContainSubstring(`"context"`))
+
+			By("building and linting the project with all webhook types")
+			Expect(kbc.Make("all")).To(Succeed())
+			Expect(kbc.Make("lint")).To(Succeed())
 		})
 
 		It("should correctly scaffold conversion webhook and storage version marker", func() {
