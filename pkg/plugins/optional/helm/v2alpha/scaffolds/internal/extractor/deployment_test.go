@@ -24,6 +24,7 @@ import (
 
 const (
 	keyName         = "name"
+	keyArgs         = "args"
 	keyReplicas     = "replicas"
 	keySecretName   = "secretName"
 	keyConfigMap    = "configMap"

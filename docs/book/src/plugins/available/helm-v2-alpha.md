@@ -214,6 +214,18 @@ Webhook and metrics certificates (`webhook-certs`, `metrics-certs`) are managed 
 
 ### Metrics configuration
 
+#### `metrics.port`
+
+Set `metrics.port` to change the port used by the metrics endpoint. The chart applies the same value to the manager `--metrics-bind-address` argument, the metrics Service port and targetPort, and the metrics NetworkPolicy.
+
+For example, install the chart with the metrics endpoint on port `8444`:
+
+```bash
+helm install my-operator ./dist/chart --set metrics.port=8444
+```
+
+The default is `8443`, detected from your project configuration.
+
 #### `metrics.secure`
 
 Control transport security and authentication for the metrics endpoint (default: `true`).
@@ -244,6 +256,26 @@ For example, install the chart with the webhook server on port `9444`:
 ```bash
 helm install my-operator ./dist/chart --set webhook.port=9444
 ```
+
+The default is `9443`, detected from your project configuration.
+
+### Health probe port configuration
+
+Set `manager.healthProbe.port` to change the port where the manager serves its health probes. The liveness (`/healthz`) and readiness (`/readyz`) endpoints bind to this port. The chart applies the same value to the `--health-probe-bind-address` argument, the `health` container port, and the `httpGet` port of both probes.
+
+For example, install the chart with the health probes on port `8082`:
+
+```bash
+helm install my-operator ./dist/chart --set manager.healthProbe.port=8082
+```
+
+The default is `8081`, detected from your project configuration.
+
+### Port flags in manager.args
+
+Use `manager.args` for flags that the chart does not expose as values. For the ports above, always use `metrics.port`, `webhook.port`, and `manager.healthProbe.port`.
+
+The chart renders `--metrics-bind-address`, `--webhook-port`, and `--health-probe-bind-address` from these values. Setting one of these flags in `manager.args` overrides the manager listener, while the Service, NetworkPolicy, and probe ports keep the configured values, so traffic and probes target the wrong port. The plugin removes these flags from the extracted args when it generates the chart.
 
 ### NetworkPolicy configuration
 

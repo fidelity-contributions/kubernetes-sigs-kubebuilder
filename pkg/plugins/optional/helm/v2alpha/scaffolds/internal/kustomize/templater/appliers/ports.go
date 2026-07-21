@@ -111,7 +111,7 @@ func TemplatePorts(yamlContent string, resource *unstructured.Unstructured) stri
 // --health-probe-bind-address arg, the "health" containerPort, and the liveness
 // and readiness httpGet ports.
 func templateHealthProbePort(yamlContent string) string {
-	const healthPortTemplate = "{{ .Values.healthProbe.port }}"
+	const healthPortTemplate = "{{ .Values.manager.healthProbe.port }}"
 
 	// --health-probe-bind-address=:PORT (also HOST:PORT and IPv6 [::1]:PORT)
 	yamlContent = regexp.MustCompile(`--health-probe-bind-address=(\[[^\]]*\]|[^\s:]*):([0-9]+)`).

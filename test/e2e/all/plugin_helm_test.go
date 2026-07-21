@@ -199,13 +199,13 @@ var _ = Describe("kubebuilder", func() {
 			// helpers.Run drives the full runtime verification against the customized chart:
 			// the pod only reaches Ready if the health probe answers on customHealthProbePort,
 			// the defaulting, validating, and conversion webhook flows work through
-			// customWebhookPort, and the metrics are scraped from customMetricsPort.
+			// customWebhookPort, and the metrics are scraped through the Service port,
+			// which is asserted below to be customMetricsPort.
 			helpers.Run(kbc, helpers.RunOptions{
 				HasWebhook:          true,
 				HasMetrics:          true,
 				HasNetworkPolicies:  true,
 				InstallMethod:       helpers.InstallMethodHelm,
-				MetricsPort:         customMetricsPort,
 				SkipChartGeneration: true, // Chart already generated and customized above
 			})
 
@@ -226,6 +226,10 @@ var _ = Describe("kubebuilder", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ports).To(ContainSubstring(strconv.Itoa(customHealthProbePort)))
 			Expect(ports).To(ContainSubstring(strconv.Itoa(customWebhookPort)))
+
+			By("verifying the metrics Service exposes the custom port")
+			namePrefix := fmt.Sprintf("e2e-%s", kbc.TestSuffix)
+			Expect(helpers.GetMetricsServicePort(namePrefix, kbc)).To(Equal(customMetricsPort))
 		})
 
 		It("should generate a namespeced runnable project using webhooks and installed with the HelmChart", func() {

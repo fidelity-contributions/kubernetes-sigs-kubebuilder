@@ -124,9 +124,6 @@ crd:
 	// Metrics configuration (always present, enabled based on detected metrics artifacts)
 	f.addMetricsSection(&buf)
 
-	// Health probe configuration (always present; every manager exposes liveness/readiness probes)
-	f.addHealthProbeSection(&buf)
-
 	// Cert-manager configuration (always present)
 	// IMPORTANT: Webhooks REQUIRE cert-manager for TLS certificates.
 	// HasWebhooks = true means cert-manager MUST be enabled.
@@ -210,6 +207,9 @@ func (f *HelmValues) addImageSection(buf *bytes.Buffer) {
 func (f *HelmValues) addDeploymentConfig(buf *bytes.Buffer) {
 	// Args
 	f.addArgsSection(buf)
+
+	// Health probe (always present; every manager exposes liveness/readiness probes)
+	f.addHealthProbeSection(buf)
 
 	// Environment variables
 	f.addEnvSection(buf)
@@ -585,20 +585,20 @@ metrics:
 `)
 }
 
-// addHealthProbeSection adds health probe configuration
+// addHealthProbeSection adds health probe configuration under the manager section
 func (f *HelmValues) addHealthProbeSection(buf *bytes.Buffer) {
 	port := 8081
 	if f.Extraction != nil && f.Extraction.Features.HealthProbePort > 0 {
 		port = f.Extraction.Features.HealthProbePort
 	}
 
-	buf.WriteString(`## Health probe endpoint.
-## Serves the liveness (/healthz) and readiness (/readyz) checks.
-##
-healthProbe:
+	buf.WriteString(`  ## Health probes.
+  ## The manager serves the liveness (/healthz) and readiness (/readyz) endpoints on this port.
+  ##
+  healthProbe:
 `)
-	buf.WriteString("  # Health probe server port\n")
-	fmt.Fprintf(buf, "  port: %d\n\n", port)
+	buf.WriteString("    # Health probe server port\n")
+	fmt.Fprintf(buf, "    port: %d\n\n", port)
 }
 
 // addWebhookSection adds webhook configuration
