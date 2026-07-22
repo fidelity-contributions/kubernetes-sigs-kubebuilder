@@ -170,7 +170,8 @@ func extractPortFromService(svc *unstructured.Unstructured) int {
 	return port
 }
 
-// extractWebhookPortFromDeployment extracts the webhook port from deployment container ports.
+// extractWebhookPortFromDeployment extracts the webhook port from the manager
+// container's --webhook-port argument, or from the container ports.
 func extractWebhookPortFromDeployment(deployment *unstructured.Unstructured) int {
 	specMap := extractDeploymentSpec(deployment)
 	if specMap == nil {
@@ -179,6 +180,20 @@ func extractWebhookPortFromDeployment(deployment *unstructured.Unstructured) int
 	container := findManagerContainer(deployment, specMap)
 	if container == nil {
 		return 0
+	}
+
+	// The manager binds the port from its --webhook-port argument, so that
+	// value wins over the declared container port.
+	if argsField, found, err := unstructured.NestedFieldNoCopy(container, "args"); found && err == nil {
+		if argsList, ok := argsField.([]any); ok {
+			for _, a := range argsList {
+				if strArg, ok := a.(string); ok && strings.Contains(strArg, "--webhook-port") {
+					if port := ExtractPortFromArg(strArg); port > 0 {
+						return port
+					}
+				}
+			}
+		}
 	}
 
 	portsField, found, err := unstructured.NestedFieldNoCopy(container, "ports")

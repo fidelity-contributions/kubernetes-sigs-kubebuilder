@@ -442,7 +442,13 @@ func extractContainerArgs(container map[string]any, config map[string]any) {
 		if strings.Contains(strArg, "--health-probe-bind-address") {
 			continue
 		}
+		// Extract port from webhook-port. The arg itself is filtered out.
 		if strings.Contains(strArg, "--webhook-port") {
+			if port := ExtractPortFromArg(strArg); port > 0 {
+				if _, exists := config["webhookPort"]; !exists {
+					config["webhookPort"] = port
+				}
+			}
 			continue
 		}
 		if strings.Contains(strArg, "--webhook-cert-path") ||
