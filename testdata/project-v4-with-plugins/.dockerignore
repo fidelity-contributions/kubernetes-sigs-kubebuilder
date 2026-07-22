@@ -2,10 +2,14 @@
 # Ignore everything by default and re-include only needed files
 **
 
-# Re-include Go source files (but not *_test.go)
-!**/*.go
-**/*_test.go
-
 # Re-include Go module files
 !go.mod
 !go.sum
+
+# Re-include Go source files (but not *_test.go). The source dirs are named because
+# Podman and the classic Docker builder skip ignored dirs; add your own dirs here too.
+!**/*.go
+!cmd
+!api
+!internal
+**/*_test.go
