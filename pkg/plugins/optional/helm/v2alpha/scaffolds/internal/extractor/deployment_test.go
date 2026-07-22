@@ -417,6 +417,53 @@ var _ = Describe("DeploymentExtractor", func() {
 		)
 	})
 
+	Describe("Webhook port extraction", func() {
+		It("should extract webhook port from --webhook-port argument in deployment args", func() {
+			deployment := makeDeployment(deploymentOpts{
+				containers: []map[string]any{
+					{
+						keyName:  valManager,
+						keyImage: valControllerImage,
+						"args": []any{
+							"--webhook-port=9443",
+						},
+					},
+				},
+			})
+
+			config, err := (&DeploymentExtractor{}).ExtractDeploymentConfig(deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.WebhookPort).To(Equal(9443))
+		})
+
+		It("should prioritize --webhook-port argument over container ports", func() {
+			deployment := makeDeployment(deploymentOpts{
+				containers: []map[string]any{
+					{
+						keyName:  valManager,
+						keyImage: valControllerImage,
+						"args": []any{
+							"--webhook-port=8443",
+						},
+						"ports": []any{
+							map[string]any{
+								"name":          "webhook-server",
+								"containerPort": int64(9443),
+							},
+						},
+					},
+				},
+			})
+
+			config, err := (&DeploymentExtractor{}).ExtractDeploymentConfig(deployment)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.WebhookPort).To(Equal(8443))
+
+			portFromDeployment := extractWebhookPortFromDeployment(deployment)
+			Expect(portFromDeployment).To(Equal(8443))
+		})
+	})
+
 	Describe("ExtractDeploymentConfig extraVolumes extraction", func() {
 		It("should extract custom volumes without mutating the deployment", func() {
 			deployment := makeDeployment(deploymentOpts{
