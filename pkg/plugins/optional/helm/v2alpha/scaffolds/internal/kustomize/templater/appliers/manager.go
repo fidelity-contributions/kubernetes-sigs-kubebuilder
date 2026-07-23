@@ -1163,11 +1163,6 @@ func shouldInjectPodLabels(
 		trimmed != common.YamlKeyLabels
 }
 
-// appendHelmMapBlock appends Helm template blocks for rendering YAML maps with optional key filtering.
-// When existingKeys is empty, uses simple {{- if }} conditional.
-// When existingKeys is provided, uses nested {{- with }} blocks with omit() to filter duplicate keys.
-// When existingKeys is provided, adds an extra {{- with omit() }} layer for key filtering.
-
 func injectDeploymentLabels(result []string, childIndent string) []string {
 	existingKeys := extractKeysFromLines(result)
 	return appendHelmMapBlock(result, childIndent, ".Values.manager.labels", existingKeys)
@@ -1236,38 +1231,6 @@ func handleFlowStyleAnnotations(
 }
 
 // Helper functions for custom labels/annotations injection
-
-// appendNestedHelmMapBlock appends nested Helm template blocks (e.g., .Values.manager.pod -> .labels).
-func appendNestedHelmMapBlock(
-	result []string,
-	indent string,
-	outerPath string,
-	innerPath string,
-	existingKeys []string,
-) []string {
-	childIndentWidth := strconv.Itoa(len(indent))
-
-	if len(existingKeys) > 0 {
-		omitKeys := strings.Join(existingKeys, "\" \"")
-		return append(result,
-			indent+"{{- with "+outerPath+" }}",
-			indent+"{{- with "+innerPath+" }}",
-			indent+"{{- with omit . \""+omitKeys+"\" }}",
-			indent+"{{- toYaml . | nindent "+childIndentWidth+" }}",
-			indent+"{{- end }}",
-			indent+"{{- end }}",
-			indent+"{{- end }}",
-		)
-	}
-
-	return append(result,
-		indent+"{{- with "+outerPath+" }}",
-		indent+"{{- with "+innerPath+" }}",
-		indent+"{{- toYaml . | nindent "+childIndentWidth+" }}",
-		indent+"{{- end }}",
-		indent+"{{- end }}",
-	)
-}
 
 // updateMetadataTracking updates the position state as we traverse the YAML structure.
 func updateMetadataTracking(
