@@ -143,6 +143,7 @@ var _ = Describe("Resource", func() {
 				Expect(err.Error()).To(ContainSubstring(message))
 			},
 			Entry("empty path", "", "external resources must specify a path"),
+			Entry("bare domain", "example.com", "must include a package sub-path"),
 			Entry("absolute filesystem path", "/absolute/path", "must be a valid Go import path"),
 			Entry("relative package path", "api/v1", "must be a fully-qualified Go import path"),
 			Entry("leading-dot pseudo-domain", ".com/api/v1", "must be a fully-qualified Go import path"),

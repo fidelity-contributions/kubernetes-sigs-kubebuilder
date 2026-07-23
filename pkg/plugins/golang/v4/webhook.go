@@ -103,10 +103,12 @@ func (p *createWebhookSubcommand) BindFlags(fs *pflag.FlagSet) {
 		"Comma-separated list of spoke versions to be added to the conversion webhook (e.g., --spoke v1,v2)")
 
 	fs.StringVar(&p.options.DefaultingPath, "defaulting-path", "",
-		"Custom path for the defaulting/mutating webhook (e.g., /my-custom-mutate-path); only valid with --defaulting")
+		"[Optional] Custom path for the defaulting/mutating webhook (e.g., /my-custom-mutate-path). "+
+			"Only valid with --defaulting")
 
 	fs.StringVar(&p.options.ValidationPath, "validation-path", "",
-		"Custom path for the validation webhook (e.g., /my-custom-validate-path); only valid with --programmatic-validation")
+		"[Optional] Custom path for the validation webhook (e.g., /my-custom-validate-path). "+
+			"Only valid with --programmatic-validation")
 
 	fs.StringVar(&p.options.ExternalAPIPath, "external-api-path", "",
 		"Go package import path for the external API (e.g., github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1). "+
