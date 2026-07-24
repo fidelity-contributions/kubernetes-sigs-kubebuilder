@@ -151,6 +151,18 @@ var _ = Describe("createAPISubcommand", func() {
 		Expect(err.Error()).To(ContainSubstring("must be a fully-qualified Go import path"))
 	})
 
+	It("should reject bare domain external-api-path", func() {
+		subCmd.options.DoAPI = false
+		subCmd.options.DoController = true
+		subCmd.options.ExternalAPIPath = "example.com"
+
+		err := subCmd.InjectResource(res)
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid Path"))
+		Expect(err.Error()).To(ContainSubstring("must include a package sub-path"))
+	})
+
 	It("should reject leading-dot pseudo-domain external-api-path", func() {
 		subCmd.options.DoAPI = false
 		subCmd.options.DoController = true

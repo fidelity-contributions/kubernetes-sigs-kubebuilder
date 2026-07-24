@@ -84,9 +84,13 @@ func (r Resource) Validate() error {
 		if err := module.CheckImportPath(r.Path); err != nil {
 			return fmt.Errorf("invalid Path: must be a valid Go import path: %w", err)
 		}
-		first, _, _ := strings.Cut(r.Path, "/")
+		first, rest, _ := strings.Cut(r.Path, "/")
 		if !strings.Contains(first, ".") || strings.HasPrefix(first, ".") {
 			return fmt.Errorf("invalid Path: must be a fully-qualified Go import path " +
+				"(e.g., github.com/org/repo/api/v1)")
+		}
+		if rest == "" {
+			return fmt.Errorf("invalid Path: must include a package sub-path " +
 				"(e.g., github.com/org/repo/api/v1)")
 		}
 	} else if r.Path != "" {
