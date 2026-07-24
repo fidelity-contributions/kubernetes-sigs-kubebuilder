@@ -183,7 +183,7 @@ webhook:
 ## Requires prometheus-operator to be installed in the cluster.
 ##
 prometheus:
-  enabled: false
+  enabled: true
 
 ## Network policies for controlling traffic flow.
 ## Enable to restrict ingress to the controller manager.
