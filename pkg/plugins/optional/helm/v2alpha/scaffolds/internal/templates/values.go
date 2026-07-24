@@ -151,14 +151,15 @@ certManager:
 		f.addWebhookSection(&buf)
 	}
 
-	// Prometheus configuration (always present)
+	// Prometheus configuration (always present, enabled when the kustomize output provides a ServiceMonitor)
+	prometheusEnabled := f.Extraction != nil && f.Extraction.Features.HasPrometheus
+
 	buf.WriteString(`## Prometheus ServiceMonitor for metrics scraping.
 ## Requires prometheus-operator to be installed in the cluster.
 ##
 prometheus:
-  enabled: false
-
 `)
+	fmt.Fprintf(&buf, "  enabled: %t\n\n", prometheusEnabled)
 
 	// NetworkPolicy configuration (always present, enabled when NetworkPolicy resources exist)
 	networkPolicyEnabled := f.Extraction != nil && f.Extraction.Features.HasNetworkPolicy

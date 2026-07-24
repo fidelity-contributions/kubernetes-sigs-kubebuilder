@@ -72,6 +72,32 @@ var _ = Describe("HelmValues", func() {
 		})
 	})
 
+	Describe("Prometheus section", func() {
+		It("should default prometheus.enabled to false when no ServiceMonitor exists", func() {
+			values := &HelmValues{Extraction: nil}
+			values.ProjectName = testProjectName
+
+			result := values.generateValues()
+
+			Expect(result).To(ContainSubstring("prometheus:\n  enabled: false"))
+		})
+
+		It("should set prometheus.enabled to true when a ServiceMonitor is detected", func() {
+			values := &HelmValues{
+				Extraction: &extractor.Extraction{
+					Features: extractor.FeatureSet{
+						HasPrometheus: true,
+					},
+				},
+			}
+			values.ProjectName = testProjectName
+
+			result := values.generateValues()
+
+			Expect(result).To(ContainSubstring("prometheus:\n  enabled: true"))
+		})
+	})
+
 	Describe("RoleNamespaces rendering", func() {
 		Context("when no roleNamespaces are detected", func() {
 			It("should not include roleNamespaces section when Extraction is nil", func() {
